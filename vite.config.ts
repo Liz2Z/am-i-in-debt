@@ -1,5 +1,4 @@
 import { defineConfig } from 'vite';
-import * as path from 'path';
 
 export default defineConfig({
   clearScreen: false,
@@ -15,10 +14,5 @@ export default defineConfig({
     target: ['es2021', 'chrome100', 'safari13'],
     minify: !process.env.TAURI_DEBUG ? 'esbuild' : false,
     sourcemap: !!process.env.TAURI_DEBUG,
-  },
-  resolve: {
-    alias: {
-      '@': path.resolve(__dirname, './src'),
-    },
   },
 });
