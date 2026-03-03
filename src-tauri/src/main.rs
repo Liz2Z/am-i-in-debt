@@ -198,13 +198,6 @@ impl UsageInfo {
         }
     }
 
-    fn plan_name(&self) -> &str {
-        match self {
-            UsageInfo::Zhipu(_) => "智谱",
-            UsageInfo::Kimi(_) => "Kimi",
-        }
-    }
-
     fn is_zhipu(&self) -> bool {
         matches!(self, UsageInfo::Zhipu(_))
     }
@@ -222,17 +215,6 @@ struct AppState {
 }
 
 // ========== 工具函数 ==========
-
-// 格式化数字
-fn format_number(num: i64) -> String {
-    if num >= 1_000_000 {
-        format!("{:.1}M", num as f64 / 1_000_000.0)
-    } else if num >= 1_000 {
-        format!("{:.1}K", num as f64 / 1_000.0)
-    } else {
-        num.to_string()
-    }
-}
 
 // 格式化进度条
 fn format_progress_bar(percentage: f64) -> String {
@@ -509,16 +491,6 @@ async fn fetch_kimi_usage(cookie_path: &std::path::Path) -> Result<KimiUsageInfo
         weekly_percentage,
         weekly_reset_time,
     })
-}
-
-// 获取指定 plan 的使用情况
-async fn fetch_usage_info(plan: CodingPlan) -> Result<UsageInfo, String> {
-    let cookie_path = plan.data_dir().join("cookies.json");
-
-    match plan {
-        CodingPlan::Zhipu => fetch_zhipu_usage(&cookie_path).await.map(UsageInfo::Zhipu),
-        CodingPlan::Kimi => fetch_kimi_usage(&cookie_path).await.map(UsageInfo::Kimi),
-    }
 }
 
 // 执行登录脚本
