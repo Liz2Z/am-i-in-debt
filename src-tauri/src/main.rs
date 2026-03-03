@@ -1,10 +1,10 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use am_i_in_debt::{
-    api::fetch_usage_for_plan,
+    api::fetch_usage_for_provider,
     login::run_login_script,
     merge_settings,
-    models::CodingPlan,
+    models::Provider,
     state::AppState,
     update_menu,
     UsageInfo,
@@ -75,12 +75,10 @@ fn main() {
 async fn fetch_all_usage() -> Vec<UsageInfo> {
     let mut usage_list = Vec::new();
 
-    if let Some(info) = fetch_usage_for_plan(CodingPlan::Zhipu).await {
-        usage_list.push(info);
-    }
-
-    if let Some(info) = fetch_usage_for_plan(CodingPlan::Kimi).await {
-        usage_list.push(info);
+    for provider in Provider::ALL {
+        if let Some(info) = fetch_usage_for_provider(provider).await {
+            usage_list.push(info);
+        }
     }
 
     usage_list
@@ -89,19 +87,25 @@ async fn fetch_all_usage() -> Vec<UsageInfo> {
 fn handle_menu_event(app: &tauri::AppHandle, event: tauri::menu::MenuEvent) {
     let event_id = event.id.as_ref();
 
+    if event_id.starts_with("select-") {
+        let provider_id = event_id.strip_prefix("select-").unwrap();
+        if let Some(provider) = Provider::from_provider_id(provider_id) {
+            handle_select_provider(app, provider);
+        }
+        return;
+    }
+
+    if event_id.starts_with("login-") || event_id.starts_with("relogin-") {
+        let provider_id = event_id.strip_prefix("login-")
+            .or_else(|| event_id.strip_prefix("relogin-"))
+            .unwrap();
+        if let Some(provider) = Provider::from_provider_id(provider_id) {
+            handle_login(app, provider);
+        }
+        return;
+    }
+
     match event_id {
-        "select-zhipu" => {
-            handle_select_plan(app, CodingPlan::Zhipu);
-        }
-        "select-kimi" => {
-            handle_select_plan(app, CodingPlan::Kimi);
-        }
-        "login-zhipu" | "relogin-zhipu" => {
-            handle_login(app, CodingPlan::Zhipu);
-        }
-        "login-kimi" | "relogin-kimi" => {
-            handle_login(app, CodingPlan::Kimi);
-        }
         "refresh" => {
             handle_refresh(app);
         }
@@ -112,11 +116,11 @@ fn handle_menu_event(app: &tauri::AppHandle, event: tauri::menu::MenuEvent) {
     }
 }
 
-fn handle_select_plan(app: &tauri::AppHandle, plan: CodingPlan) {
-    info!("选择 {} Coding Plan", plan.name());
+fn handle_select_provider(app: &tauri::AppHandle, provider: Provider) {
+    info!("选择 {} Coding Plan", provider.display_name());
     
-    if let Err(e) = merge_settings(plan) {
-        log::error!("切换到{}失败: {}", plan.name(), e);
+    if let Err(e) = merge_settings(provider) {
+        log::error!("切换到{}失败: {}", provider.display_name(), e);
         return;
     }
     
@@ -127,24 +131,21 @@ fn handle_select_plan(app: &tauri::AppHandle, plan: CodingPlan) {
     update_menu(app, &usage_list);
 }
 
-fn handle_login(app: &tauri::AppHandle, plan: CodingPlan) {
+fn handle_login(app: &tauri::AppHandle, provider: Provider) {
     let app_handle = app.clone();
     tauri::async_runtime::spawn(async move {
-        if let Err(e) = run_login_script(plan) {
-            log::error!("登录{}失败: {}", plan.name(), e);
+        if let Err(e) = run_login_script(provider) {
+            log::error!("登录{}失败: {}", provider.display_name(), e);
             return;
         }
 
         tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
 
-        if let Some(info) = fetch_usage_for_plan(plan).await {
+        if let Some(info) = fetch_usage_for_provider(provider).await {
             let state: tauri::State<AppState> = app_handle.state();
             let mut usage_list = state.get_usage();
             
-            match plan {
-                CodingPlan::Zhipu => usage_list.retain(|u| !u.is_zhipu()),
-                CodingPlan::Kimi => usage_list.retain(|u| !u.is_kimi()),
-            }
+            usage_list.retain(|u| u.provider() != provider);
             
             usage_list.push(info);
             update_menu(&app_handle, &usage_list);

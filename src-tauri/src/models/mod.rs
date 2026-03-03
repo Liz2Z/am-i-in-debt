@@ -18,35 +18,57 @@ pub fn get_app_data_dir() -> PathBuf {
     get_xdg_data_dir().join("am-i-in-debt")
 }
 
+pub const PROVIDER_ZHIPU: &str = "zhipu-coding-plan";
+pub const PROVIDER_KIMI: &str = "kimi-coding-plan";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum CodingPlan {
+pub enum Provider {
     Zhipu,
     Kimi,
 }
 
-impl CodingPlan {
-    pub fn name(&self) -> &str {
+impl Provider {
+    pub const ALL: [Provider; 2] = [Provider::Zhipu, Provider::Kimi];
+    
+    pub fn provider_id(&self) -> &'static str {
         match self {
-            CodingPlan::Zhipu => "智谱",
-            CodingPlan::Kimi => "Kimi",
+            Provider::Zhipu => PROVIDER_ZHIPU,
+            Provider::Kimi => PROVIDER_KIMI,
         }
     }
 
-    pub fn id(&self) -> &str {
+    pub fn display_name(&self) -> &'static str {
         match self {
-            CodingPlan::Zhipu => "zhipu",
-            CodingPlan::Kimi => "kimi",
+            Provider::Zhipu => "智谱",
+            Provider::Kimi => "Kimi",
+        }
+    }
+
+    pub fn login_script_arg(&self) -> &'static str {
+        match self {
+            Provider::Zhipu => "zhipu",
+            Provider::Kimi => "kimi",
         }
     }
 
     pub fn data_dir(&self) -> PathBuf {
-        get_app_data_dir().join(format!("{}-coding-plan", self.id()))
+        get_app_data_dir().join(self.provider_id())
     }
 
     pub fn cookie_path(&self) -> PathBuf {
         self.data_dir().join("cookies.json")
     }
+
+    pub fn from_provider_id(id: &str) -> Option<Self> {
+        match id {
+            PROVIDER_ZHIPU => Some(Provider::Zhipu),
+            PROVIDER_KIMI => Some(Provider::Kimi),
+            _ => None,
+        }
+    }
 }
+
+pub type CodingPlan = Provider;
 
 #[derive(Debug, Clone)]
 pub enum UsageInfo {
@@ -55,10 +77,17 @@ pub enum UsageInfo {
 }
 
 impl UsageInfo {
-    pub fn plan_id(&self) -> &str {
+    pub fn provider_id(&self) -> &str {
         match self {
-            UsageInfo::Zhipu(_) => "zhipu",
-            UsageInfo::Kimi(_) => "kimi",
+            UsageInfo::Zhipu(_) => PROVIDER_ZHIPU,
+            UsageInfo::Kimi(_) => PROVIDER_KIMI,
+        }
+    }
+
+    pub fn provider(&self) -> Provider {
+        match self {
+            UsageInfo::Zhipu(_) => Provider::Zhipu,
+            UsageInfo::Kimi(_) => Provider::Kimi,
         }
     }
 

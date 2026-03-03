@@ -3,47 +3,70 @@ use tauri::{
     AppHandle, Manager, Wry,
 };
 
-use crate::models::{format_progress_bar, CodingPlan, UsageInfo, ZhipuUsageInfo, KimiUsageInfo};
+use crate::models::{format_progress_bar, Provider, UsageInfo, ZhipuUsageInfo, KimiUsageInfo};
 use crate::state::AppState;
-use crate::provider_switch::get_current_selected_plan;
+use crate::provider_switch::get_current_selected_provider;
 
 pub fn build_menu(app: &AppHandle, usage_list: &[UsageInfo], update_time_suffix: &str) -> Menu<Wry> {
-    let selected_plan = get_current_selected_plan();
+    let selected_provider = get_current_selected_provider();
     
     if usage_list.is_empty() {
-        build_empty_menu(app, selected_plan)
+        build_empty_menu(app, selected_provider)
     } else {
-        build_usage_menu(app, usage_list, update_time_suffix, selected_plan)
+        build_usage_menu(app, usage_list, update_time_suffix, selected_provider)
     }
 }
 
-fn build_empty_menu(app: &AppHandle, selected_plan: Option<CodingPlan>) -> Menu<Wry> {
+fn build_empty_menu(app: &AppHandle, selected_provider: Option<Provider>) -> Menu<Wry> {
     let header = MenuItem::with_id(app, "header", "Am I In Debt ?", true, None::<&str>).unwrap();
     let sep1 = PredefinedMenuItem::separator(app).unwrap();
     
-    let zhipu_checked = selected_plan == Some(CodingPlan::Zhipu);
-    let kimi_checked = selected_plan == Some(CodingPlan::Kimi);
+    let mut items: Vec<Box<dyn tauri::menu::IsMenuItem<Wry>>> = vec![
+        Box::new(header),
+        Box::new(sep1),
+    ];
     
-    let select_zhipu = CheckMenuItem::with_id(app, "select-zhipu", "智谱 Coding Plan", true, zhipu_checked, None::<&str>).unwrap();
-    let select_kimi = CheckMenuItem::with_id(app, "select-kimi", "Kimi Coding Plan", true, kimi_checked, None::<&str>).unwrap();
+    for provider in Provider::ALL {
+        let is_checked = selected_provider == Some(provider);
+        let item = CheckMenuItem::with_id(
+            app,
+            format!("select-{}", provider.provider_id()),
+            format!("{} Coding Plan", provider.display_name()),
+            true,
+            is_checked,
+            None::<&str>,
+        ).unwrap();
+        items.push(Box::new(item));
+    }
     
     let sep2 = PredefinedMenuItem::separator(app).unwrap();
-    let login_zhipu = MenuItem::with_id(app, "login-zhipu", "登录智谱 Coding Plan", true, None::<&str>).unwrap();
-    let login_kimi = MenuItem::with_id(app, "login-kimi", "登录 Kimi Coding Plan", true, None::<&str>).unwrap();
+    items.push(Box::new(sep2));
+    
+    for provider in Provider::ALL {
+        let item = MenuItem::with_id(
+            app,
+            format!("login-{}", provider.provider_id()),
+            format!("登录{} Coding Plan", provider.display_name()),
+            true,
+            None::<&str>,
+        ).unwrap();
+        items.push(Box::new(item));
+    }
+    
     let sep3 = PredefinedMenuItem::separator(app).unwrap();
     let quit = MenuItem::with_id(app, "quit", "退出", true, None::<&str>).unwrap();
+    items.push(Box::new(sep3));
+    items.push(Box::new(quit));
 
-    Menu::with_items(
-        app,
-        &[&header as &dyn tauri::menu::IsMenuItem<Wry>, &sep1, &select_zhipu, &select_kimi, &sep2, &login_zhipu, &login_kimi, &sep3, &quit],
-    ).unwrap()
+    let items_refs: Vec<&dyn tauri::menu::IsMenuItem<Wry>> = items.iter().map(|item| item.as_ref()).collect();
+    Menu::with_items(app, &items_refs).unwrap()
 }
 
 fn build_usage_menu(
     app: &AppHandle,
     usage_list: &[UsageInfo],
     update_time_suffix: &str,
-    selected_plan: Option<CodingPlan>,
+    selected_provider: Option<Provider>,
 ) -> Menu<Wry> {
     let header = MenuItem::with_id(app, "header", "Am I In Debt ?", true, None::<&str>).unwrap();
     let sep1 = PredefinedMenuItem::separator(app).unwrap();
@@ -53,21 +76,21 @@ fn build_usage_menu(
         Box::new(sep1),
     ];
 
-    for plan in [CodingPlan::Zhipu, CodingPlan::Kimi] {
-        if let Some(usage) = usage_list.iter().find(|u| u.plan_id() == plan.id()) {
+    for provider in Provider::ALL {
+        if let Some(usage) = usage_list.iter().find(|u| u.provider_id() == provider.provider_id()) {
             match usage {
                 UsageInfo::Zhipu(info) => {
-                    add_zhipu_menu_items(app, &mut items, plan, info, selected_plan);
+                    add_zhipu_menu_items(app, &mut items, provider, info, selected_provider);
                 }
                 UsageInfo::Kimi(info) => {
-                    add_kimi_menu_items(app, &mut items, plan, info, selected_plan);
+                    add_kimi_menu_items(app, &mut items, provider, info, selected_provider);
                 }
             }
         } else {
             items.push(Box::new(MenuItem::with_id(
                 app,
-                format!("login-{}", plan.id()),
-                format!("登录{} Coding Plan", plan.name()),
+                format!("login-{}", provider.provider_id()),
+                format!("登录{} Coding Plan", provider.display_name()),
                 true,
                 None::<&str>,
             ).unwrap()));
@@ -77,14 +100,16 @@ fn build_usage_menu(
     items.push(Box::new(PredefinedMenuItem::separator(app).unwrap()));
     items.push(Box::new(MenuItem::with_id(app, "refresh", format!("刷新{}", update_time_suffix), true, None::<&str>).unwrap()));
 
-    let zhipu_logged_in = usage_list.iter().any(|u| u.is_zhipu());
-    let kimi_logged_in = usage_list.iter().any(|u| u.is_kimi());
-    
-    if zhipu_logged_in {
-        items.push(Box::new(MenuItem::with_id(app, "relogin-zhipu", "重新登录智谱", true, None::<&str>).unwrap()));
-    }
-    if kimi_logged_in {
-        items.push(Box::new(MenuItem::with_id(app, "relogin-kimi", "重新登录 Kimi", true, None::<&str>).unwrap()));
+    for provider in Provider::ALL {
+        if usage_list.iter().any(|u| u.provider() == provider) {
+            items.push(Box::new(MenuItem::with_id(
+                app,
+                format!("relogin-{}", provider.provider_id()),
+                format!("重新登录{}", provider.display_name()),
+                true,
+                None::<&str>,
+            ).unwrap()));
+        }
     }
 
     items.push(Box::new(PredefinedMenuItem::separator(app).unwrap()));
@@ -97,16 +122,16 @@ fn build_usage_menu(
 fn add_zhipu_menu_items<'a>(
     app: &'a AppHandle,
     items: &mut Vec<Box<dyn tauri::menu::IsMenuItem<Wry> + 'a>>,
-    plan: CodingPlan,
+    provider: Provider,
     info: &ZhipuUsageInfo,
-    selected_plan: Option<CodingPlan>,
+    selected_provider: Option<Provider>,
 ) {
-    let is_selected = selected_plan == Some(plan);
+    let is_selected = selected_provider == Some(provider);
     
     items.push(Box::new(CheckMenuItem::with_id(
         app,
-        format!("select-{}", plan.id()),
-        format!("{} Coding Plan", plan.name()),
+        format!("select-{}", provider.provider_id()),
+        format!("{} Coding Plan", provider.display_name()),
         true,
         is_selected,
         None::<&str>,
@@ -114,21 +139,21 @@ fn add_zhipu_menu_items<'a>(
 
     items.push(Box::new(MenuItem::with_id(
         app,
-        format!("{}-token-title", plan.id()),
+        format!("{}-token-title", provider.provider_id()),
         format!("Token 额度（每 {} 小时）", info.token_hours),
         false,
         None::<&str>,
     ).unwrap()));
     items.push(Box::new(MenuItem::with_id(
         app,
-        format!("{}-token-bar", plan.id()),
+        format!("{}-token-bar", provider.provider_id()),
         format_progress_bar(info.token_percentage),
         false,
         None::<&str>,
     ).unwrap()));
     items.push(Box::new(MenuItem::with_id(
         app,
-        format!("{}-token-reset", plan.id()),
+        format!("{}-token-reset", provider.provider_id()),
         format!("重置: {}", info.token_reset_time),
         false,
         None::<&str>,
@@ -136,7 +161,7 @@ fn add_zhipu_menu_items<'a>(
 
     items.push(Box::new(MenuItem::with_id(
         app,
-        format!("{}-sep", plan.id()),
+        format!("{}-sep", provider.provider_id()),
         "-".repeat(25),
         false,
         None::<&str>,
@@ -144,28 +169,28 @@ fn add_zhipu_menu_items<'a>(
 
     items.push(Box::new(MenuItem::with_id(
         app,
-        format!("{}-mcp-title", plan.id()),
+        format!("{}-mcp-title", provider.provider_id()),
         "MCP 额度（每月）",
         false,
         None::<&str>,
     ).unwrap()));
     items.push(Box::new(MenuItem::with_id(
         app,
-        format!("{}-mcp-bar", plan.id()),
+        format!("{}-mcp-bar", provider.provider_id()),
         format_progress_bar(info.mcp_percentage as f64),
         false,
         None::<&str>,
     ).unwrap()));
     items.push(Box::new(MenuItem::with_id(
         app,
-        format!("{}-mcp-detail", plan.id()),
+        format!("{}-mcp-detail", provider.provider_id()),
         format!("搜索: {} | 网页: {} | 阅读: {}", info.mcp_search, info.mcp_web, info.mcp_zread),
         false,
         None::<&str>,
     ).unwrap()));
     items.push(Box::new(MenuItem::with_id(
         app,
-        format!("{}-mcp-reset", plan.id()),
+        format!("{}-mcp-reset", provider.provider_id()),
         format!("重置: {}", info.mcp_reset_time),
         false,
         None::<&str>,
@@ -176,16 +201,16 @@ fn add_zhipu_menu_items<'a>(
 fn add_kimi_menu_items<'a>(
     app: &'a AppHandle,
     items: &mut Vec<Box<dyn tauri::menu::IsMenuItem<Wry> + 'a>>,
-    plan: CodingPlan,
+    provider: Provider,
     info: &KimiUsageInfo,
-    selected_plan: Option<CodingPlan>,
+    selected_provider: Option<Provider>,
 ) {
-    let is_selected = selected_plan == Some(plan);
+    let is_selected = selected_provider == Some(provider);
     
     items.push(Box::new(CheckMenuItem::with_id(
         app,
-        format!("select-{}", plan.id()),
-        format!("{} Coding Plan", plan.name()),
+        format!("select-{}", provider.provider_id()),
+        format!("{} Coding Plan", provider.display_name()),
         true,
         is_selected,
         None::<&str>,
@@ -193,21 +218,21 @@ fn add_kimi_menu_items<'a>(
 
     items.push(Box::new(MenuItem::with_id(
         app,
-        format!("{}-hourly-title", plan.id()),
+        format!("{}-hourly-title", provider.provider_id()),
         format!("Token 额度（每 {} 小时）", info.hourly_window),
         false,
         None::<&str>,
     ).unwrap()));
     items.push(Box::new(MenuItem::with_id(
         app,
-        format!("{}-hourly-bar", plan.id()),
+        format!("{}-hourly-bar", provider.provider_id()),
         format_progress_bar(info.hourly_percentage),
         false,
         None::<&str>,
     ).unwrap()));
     items.push(Box::new(MenuItem::with_id(
         app,
-        format!("{}-hourly-reset", plan.id()),
+        format!("{}-hourly-reset", provider.provider_id()),
         format!("重置: {}", info.hourly_reset_time),
         false,
         None::<&str>,
@@ -215,7 +240,7 @@ fn add_kimi_menu_items<'a>(
 
     items.push(Box::new(MenuItem::with_id(
         app,
-        format!("{}-sep", plan.id()),
+        format!("{}-sep", provider.provider_id()),
         "-".repeat(25),
         false,
         None::<&str>,
@@ -223,21 +248,21 @@ fn add_kimi_menu_items<'a>(
 
     items.push(Box::new(MenuItem::with_id(
         app,
-        format!("{}-weekly-title", plan.id()),
+        format!("{}-weekly-title", provider.provider_id()),
         "Token 额度（每周）",
         false,
         None::<&str>,
     ).unwrap()));
     items.push(Box::new(MenuItem::with_id(
         app,
-        format!("{}-weekly-bar", plan.id()),
+        format!("{}-weekly-bar", provider.provider_id()),
         format_progress_bar(info.weekly_percentage),
         false,
         None::<&str>,
     ).unwrap()));
     items.push(Box::new(MenuItem::with_id(
         app,
-        format!("{}-weekly-reset", plan.id()),
+        format!("{}-weekly-reset", provider.provider_id()),
         format!("重置: {}", info.weekly_reset_time),
         false,
         None::<&str>,

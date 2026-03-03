@@ -2,7 +2,7 @@ use std::fs;
 use std::path::PathBuf;
 
 use crate::error::{AppError, Result};
-use crate::models::CodingPlan;
+use crate::models::Provider;
 
 fn get_sidecar_path() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -16,8 +16,8 @@ fn get_sidecar_path_with_target() -> Option<PathBuf> {
     Some(base.with_file_name(format!("get-cookies-{}", target_triple)))
 }
 
-pub fn run_login_script(plan: CodingPlan) -> Result<()> {
-    let output_dir = plan.data_dir();
+pub fn run_login_script(provider: Provider) -> Result<()> {
+    let output_dir = provider.data_dir();
 
     fs::create_dir_all(&output_dir)?;
 
@@ -34,10 +34,7 @@ pub fn run_login_script(plan: CodingPlan) -> Result<()> {
         path_with_target
     };
 
-    let platform_arg = match plan {
-        CodingPlan::Zhipu => "zhipu",
-        CodingPlan::Kimi => "kimi",
-    };
+    let platform_arg = provider.login_script_arg();
 
     let output = std::process::Command::new(&sidecar_path)
         .arg(platform_arg)

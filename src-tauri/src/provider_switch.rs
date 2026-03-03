@@ -1,5 +1,5 @@
 use crate::error::Result;
-use crate::models::CodingPlan;
+use crate::models::Provider;
 use log::{error, info};
 use serde_json::Value;
 use std::fs;
@@ -10,8 +10,8 @@ fn get_claude_settings_path() -> PathBuf {
     PathBuf::from(home).join(".claude/settings.json")
 }
 
-fn get_plan_settings_path(plan: CodingPlan) -> PathBuf {
-    plan.data_dir().join("settings.json")
+fn get_provider_settings_path(provider: Provider) -> PathBuf {
+    provider.data_dir().join("settings.json")
 }
 
 fn get_app_state_path() -> PathBuf {
@@ -20,13 +20,13 @@ fn get_app_state_path() -> PathBuf {
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct AppSelectionState {
-    pub selected_plan: Option<String>,
+    pub selected_provider: Option<String>,
 }
 
 impl Default for AppSelectionState {
     fn default() -> Self {
         Self {
-            selected_plan: None,
+            selected_provider: None,
         }
     }
 }
@@ -64,18 +64,18 @@ pub fn save_selection_state(state: &AppSelectionState) -> Result<()> {
     
     let content = serde_json::to_string_pretty(state)?;
     fs::write(&path, content)?;
-    info!("保存选中状态: {:?}", state.selected_plan);
+    info!("保存选中状态: {:?}", state.selected_provider);
     Ok(())
 }
 
-pub fn merge_settings(plan: CodingPlan) -> Result<()> {
-    let plan_settings_path = get_plan_settings_path(plan);
+pub fn merge_settings(provider: Provider) -> Result<()> {
+    let provider_settings_path = get_provider_settings_path(provider);
     
-    if plan_settings_path.exists() {
+    if provider_settings_path.exists() {
         let claude_settings_path = get_claude_settings_path();
         
-        let plan_content = fs::read_to_string(&plan_settings_path)?;
-        let plan_settings: Value = serde_json::from_str(&plan_content)?;
+        let provider_content = fs::read_to_string(&provider_settings_path)?;
+        let provider_settings: Value = serde_json::from_str(&provider_content)?;
         
         let claude_settings: Value = if claude_settings_path.exists() {
             let claude_content = fs::read_to_string(&claude_settings_path)?;
@@ -84,18 +84,18 @@ pub fn merge_settings(plan: CodingPlan) -> Result<()> {
             serde_json::json!({})
         };
         
-        let merged = merge_json(&claude_settings, &plan_settings);
+        let merged = merge_json(&claude_settings, &provider_settings);
         
         let merged_content = serde_json::to_string_pretty(&merged)?;
         fs::write(&claude_settings_path, merged_content)?;
         
-        info!("成功合并 {} 的配置到 ~/.claude/settings.json", plan.name());
+        info!("成功合并 {} 的配置到 ~/.claude/settings.json", provider.display_name());
     } else {
-        info!("{} 的 settings.json 不存在，仅更新选中状态", plan.name());
+        info!("{} 的 settings.json 不存在，仅更新选中状态", provider.display_name());
     }
     
     let mut state = load_selection_state();
-    state.selected_plan = Some(plan.id().to_string());
+    state.selected_provider = Some(provider.provider_id().to_string());
     save_selection_state(&state)?;
     
     Ok(())
@@ -118,12 +118,8 @@ fn merge_json(base: &Value, overlay: &Value) -> Value {
     }
 }
 
-pub fn get_current_selected_plan() -> Option<CodingPlan> {
+pub fn get_current_selected_provider() -> Option<Provider> {
     let state = load_selection_state();
-    info!("当前选中状态: {:?}", state.selected_plan);
-    match state.selected_plan.as_deref() {
-        Some("zhipu") => Some(CodingPlan::Zhipu),
-        Some("kimi") => Some(CodingPlan::Kimi),
-        _ => None,
-    }
+    info!("当前选中状态: {:?}", state.selected_provider);
+    Provider::from_provider_id(state.selected_provider.as_deref()?)
 }
