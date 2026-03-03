@@ -3,11 +3,13 @@
 use am_i_in_debt::{
     api::fetch_usage_for_plan,
     login::run_login_script,
+    merge_settings,
     models::CodingPlan,
     state::AppState,
     update_menu,
     UsageInfo,
 };
+use log::info;
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::TrayIconBuilder,
@@ -15,8 +17,11 @@ use tauri::{
 };
 
 fn main() {
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
-        .init();
+    #[cfg(debug_assertions)]
+    {
+        env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
+            .init();
+    }
     
     tauri::Builder::default()
         .manage(AppState::new())
@@ -85,6 +90,12 @@ fn handle_menu_event(app: &tauri::AppHandle, event: tauri::menu::MenuEvent) {
     let event_id = event.id.as_ref();
 
     match event_id {
+        "select-zhipu" => {
+            handle_select_plan(app, CodingPlan::Zhipu);
+        }
+        "select-kimi" => {
+            handle_select_plan(app, CodingPlan::Kimi);
+        }
         "login-zhipu" | "relogin-zhipu" => {
             handle_login(app, CodingPlan::Zhipu);
         }
@@ -101,11 +112,26 @@ fn handle_menu_event(app: &tauri::AppHandle, event: tauri::menu::MenuEvent) {
     }
 }
 
+fn handle_select_plan(app: &tauri::AppHandle, plan: CodingPlan) {
+    info!("选择 {} Coding Plan", plan.name());
+    
+    if let Err(e) = merge_settings(plan) {
+        log::error!("切换到{}失败: {}", plan.name(), e);
+        return;
+    }
+    
+    info!("切换成功，重新构建菜单");
+    
+    let state: tauri::State<AppState> = app.state();
+    let usage_list = state.get_usage();
+    update_menu(app, &usage_list);
+}
+
 fn handle_login(app: &tauri::AppHandle, plan: CodingPlan) {
     let app_handle = app.clone();
     tauri::async_runtime::spawn(async move {
         if let Err(e) = run_login_script(plan) {
-            eprintln!("登录{}失败: {}", plan.name(), e);
+            log::error!("登录{}失败: {}", plan.name(), e);
             return;
         }
 

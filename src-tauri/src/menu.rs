@@ -1,33 +1,41 @@
 use tauri::{
-    menu::{Menu, MenuItem, PredefinedMenuItem},
+    menu::{Menu, MenuItem, PredefinedMenuItem, CheckMenuItem},
     AppHandle, Manager, Wry,
 };
 
 use crate::models::{format_progress_bar, CodingPlan, UsageInfo, ZhipuUsageInfo, KimiUsageInfo};
 use crate::state::AppState;
+use crate::provider_switch::get_current_selected_plan;
 
 pub fn build_menu(app: &AppHandle, usage_list: &[UsageInfo], update_time_suffix: &str) -> Menu<Wry> {
-    let zhipu_logged_in = usage_list.iter().any(|u| u.is_zhipu());
-    let kimi_logged_in = usage_list.iter().any(|u| u.is_kimi());
-
+    let selected_plan = get_current_selected_plan();
+    
     if usage_list.is_empty() {
-        build_empty_menu(app)
+        build_empty_menu(app, selected_plan)
     } else {
-        build_usage_menu(app, usage_list, update_time_suffix, zhipu_logged_in, kimi_logged_in)
+        build_usage_menu(app, usage_list, update_time_suffix, selected_plan)
     }
 }
 
-fn build_empty_menu(app: &AppHandle) -> Menu<Wry> {
+fn build_empty_menu(app: &AppHandle, selected_plan: Option<CodingPlan>) -> Menu<Wry> {
     let header = MenuItem::with_id(app, "header", "Am I In Debt ?", true, None::<&str>).unwrap();
     let sep1 = PredefinedMenuItem::separator(app).unwrap();
+    
+    let zhipu_checked = selected_plan == Some(CodingPlan::Zhipu);
+    let kimi_checked = selected_plan == Some(CodingPlan::Kimi);
+    
+    let select_zhipu = CheckMenuItem::with_id(app, "select-zhipu", "智谱 Coding Plan", true, zhipu_checked, None::<&str>).unwrap();
+    let select_kimi = CheckMenuItem::with_id(app, "select-kimi", "Kimi Coding Plan", true, kimi_checked, None::<&str>).unwrap();
+    
+    let sep2 = PredefinedMenuItem::separator(app).unwrap();
     let login_zhipu = MenuItem::with_id(app, "login-zhipu", "登录智谱 Coding Plan", true, None::<&str>).unwrap();
     let login_kimi = MenuItem::with_id(app, "login-kimi", "登录 Kimi Coding Plan", true, None::<&str>).unwrap();
-    let sep2 = PredefinedMenuItem::separator(app).unwrap();
+    let sep3 = PredefinedMenuItem::separator(app).unwrap();
     let quit = MenuItem::with_id(app, "quit", "退出", true, None::<&str>).unwrap();
 
     Menu::with_items(
         app,
-        &[&header as &dyn tauri::menu::IsMenuItem<Wry>, &sep1, &login_zhipu, &login_kimi, &sep2, &quit],
+        &[&header as &dyn tauri::menu::IsMenuItem<Wry>, &sep1, &select_zhipu, &select_kimi, &sep2, &login_zhipu, &login_kimi, &sep3, &quit],
     ).unwrap()
 }
 
@@ -35,8 +43,7 @@ fn build_usage_menu(
     app: &AppHandle,
     usage_list: &[UsageInfo],
     update_time_suffix: &str,
-    zhipu_logged_in: bool,
-    kimi_logged_in: bool,
+    selected_plan: Option<CodingPlan>,
 ) -> Menu<Wry> {
     let header = MenuItem::with_id(app, "header", "Am I In Debt ?", true, None::<&str>).unwrap();
     let sep1 = PredefinedMenuItem::separator(app).unwrap();
@@ -50,10 +57,10 @@ fn build_usage_menu(
         if let Some(usage) = usage_list.iter().find(|u| u.plan_id() == plan.id()) {
             match usage {
                 UsageInfo::Zhipu(info) => {
-                    add_zhipu_menu_items(app, &mut items, plan, info);
+                    add_zhipu_menu_items(app, &mut items, plan, info, selected_plan);
                 }
                 UsageInfo::Kimi(info) => {
-                    add_kimi_menu_items(app, &mut items, plan, info);
+                    add_kimi_menu_items(app, &mut items, plan, info, selected_plan);
                 }
             }
         } else {
@@ -70,6 +77,9 @@ fn build_usage_menu(
     items.push(Box::new(PredefinedMenuItem::separator(app).unwrap()));
     items.push(Box::new(MenuItem::with_id(app, "refresh", format!("刷新{}", update_time_suffix), true, None::<&str>).unwrap()));
 
+    let zhipu_logged_in = usage_list.iter().any(|u| u.is_zhipu());
+    let kimi_logged_in = usage_list.iter().any(|u| u.is_kimi());
+    
     if zhipu_logged_in {
         items.push(Box::new(MenuItem::with_id(app, "relogin-zhipu", "重新登录智谱", true, None::<&str>).unwrap()));
     }
@@ -89,12 +99,16 @@ fn add_zhipu_menu_items<'a>(
     items: &mut Vec<Box<dyn tauri::menu::IsMenuItem<Wry> + 'a>>,
     plan: CodingPlan,
     info: &ZhipuUsageInfo,
+    selected_plan: Option<CodingPlan>,
 ) {
-    items.push(Box::new(MenuItem::with_id(
+    let is_selected = selected_plan == Some(plan);
+    
+    items.push(Box::new(CheckMenuItem::with_id(
         app,
-        format!("{}-header", plan.id()),
+        format!("select-{}", plan.id()),
         format!("{} Coding Plan", plan.name()),
         true,
+        is_selected,
         None::<&str>,
     ).unwrap()));
 
@@ -164,12 +178,16 @@ fn add_kimi_menu_items<'a>(
     items: &mut Vec<Box<dyn tauri::menu::IsMenuItem<Wry> + 'a>>,
     plan: CodingPlan,
     info: &KimiUsageInfo,
+    selected_plan: Option<CodingPlan>,
 ) {
-    items.push(Box::new(MenuItem::with_id(
+    let is_selected = selected_plan == Some(plan);
+    
+    items.push(Box::new(CheckMenuItem::with_id(
         app,
-        format!("{}-header", plan.id()),
+        format!("select-{}", plan.id()),
         format!("{} Coding Plan", plan.name()),
         true,
+        is_selected,
         None::<&str>,
     ).unwrap()));
 

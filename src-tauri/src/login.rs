@@ -51,8 +51,8 @@ pub fn run_login_script(plan: CodingPlan) -> Result<()> {
         return Err(AppError::Config(format!("登录失败: {}\n{}", stdout, stderr)));
     }
 
-    print!("{}", String::from_utf8_lossy(&output.stdout));
-    eprint!("{}", String::from_utf8_lossy(&output.stderr));
+    log::info!("{}", String::from_utf8_lossy(&output.stdout));
+    log::error!("{}", String::from_utf8_lossy(&output.stderr));
 
     Ok(())
 }
