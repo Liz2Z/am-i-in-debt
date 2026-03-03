@@ -5,6 +5,8 @@ pub use zhipu::*;
 pub use kimi::*;
 
 use std::path::PathBuf;
+use std::collections::HashMap;
+use std::sync::LazyLock;
 
 pub fn get_xdg_data_dir() -> PathBuf {
     if let Ok(xdg_data) = std::env::var("XDG_DATA_HOME") {
@@ -18,57 +20,61 @@ pub fn get_app_data_dir() -> PathBuf {
     get_xdg_data_dir().join("am-i-in-debt")
 }
 
-pub const PROVIDER_ZHIPU: &str = "zhipu-coding-plan";
-pub const PROVIDER_KIMI: &str = "kimi-coding-plan";
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Provider {
-    Zhipu,
-    Kimi,
+pub struct Provider {
+    pub id: &'static str,
+    pub display_name: &'static str,
+    pub login_script_arg: &'static str,
 }
 
 impl Provider {
-    pub const ALL: [Provider; 2] = [Provider::Zhipu, Provider::Kimi];
-    
-    pub fn provider_id(&self) -> &'static str {
-        match self {
-            Provider::Zhipu => PROVIDER_ZHIPU,
-            Provider::Kimi => PROVIDER_KIMI,
-        }
-    }
+    pub const ZHIPU: Provider = Provider {
+        id: "zhipu-coding-plan",
+        display_name: "智谱",
+        login_script_arg: "zhipu",
+    };
 
-    pub fn display_name(&self) -> &'static str {
-        match self {
-            Provider::Zhipu => "智谱",
-            Provider::Kimi => "Kimi",
-        }
-    }
-
-    pub fn login_script_arg(&self) -> &'static str {
-        match self {
-            Provider::Zhipu => "zhipu",
-            Provider::Kimi => "kimi",
-        }
-    }
+    pub const KIMI: Provider = Provider {
+        id: "kimi-coding-plan",
+        display_name: "Kimi",
+        login_script_arg: "kimi",
+    };
 
     pub fn data_dir(&self) -> PathBuf {
-        get_app_data_dir().join(self.provider_id())
+        get_app_data_dir().join(self.id)
     }
 
     pub fn cookie_path(&self) -> PathBuf {
         self.data_dir().join("cookies.json")
     }
+}
 
-    pub fn from_provider_id(id: &str) -> Option<Self> {
-        match id {
-            PROVIDER_ZHIPU => Some(Provider::Zhipu),
-            PROVIDER_KIMI => Some(Provider::Kimi),
-            _ => None,
-        }
-    }
+pub static PROVIDER_REGISTRY: LazyLock<HashMap<&'static str, Provider>> = LazyLock::new(|| {
+    let mut map = HashMap::new();
+    map.insert(Provider::ZHIPU.id, Provider::ZHIPU);
+    map.insert(Provider::KIMI.id, Provider::KIMI);
+    map
+});
+
+pub static ALL_PROVIDERS: LazyLock<Vec<Provider>> = LazyLock::new(|| {
+    vec![Provider::ZHIPU, Provider::KIMI]
+});
+
+pub fn get_provider_by_id(id: &str) -> Option<Provider> {
+    PROVIDER_REGISTRY.get(id).cloned()
 }
 
 pub type CodingPlan = Provider;
+
+pub trait MenuRenderable {
+    fn provider(&self) -> Provider;
+    fn render_menu_items(
+        &self,
+        app: &tauri::AppHandle,
+        provider: Provider,
+        is_selected: bool,
+    ) -> Vec<Box<dyn tauri::menu::IsMenuItem<tauri::Wry>>>;
+}
 
 #[derive(Debug, Clone)]
 pub enum UsageInfo {
@@ -77,26 +83,26 @@ pub enum UsageInfo {
 }
 
 impl UsageInfo {
-    pub fn provider_id(&self) -> &str {
-        match self {
-            UsageInfo::Zhipu(_) => PROVIDER_ZHIPU,
-            UsageInfo::Kimi(_) => PROVIDER_KIMI,
-        }
-    }
-
     pub fn provider(&self) -> Provider {
         match self {
-            UsageInfo::Zhipu(_) => Provider::Zhipu,
-            UsageInfo::Kimi(_) => Provider::Kimi,
+            UsageInfo::Zhipu(info) => info.provider(),
+            UsageInfo::Kimi(info) => info.provider(),
         }
     }
 
-    pub fn is_zhipu(&self) -> bool {
-        matches!(self, UsageInfo::Zhipu(_))
+    pub fn provider_id(&self) -> &'static str {
+        self.provider().id
     }
 
-    pub fn is_kimi(&self) -> bool {
-        matches!(self, UsageInfo::Kimi(_))
+    pub fn render_menu_items(
+        &self,
+        app: &tauri::AppHandle,
+        is_selected: bool,
+    ) -> Vec<Box<dyn tauri::menu::IsMenuItem<tauri::Wry>>> {
+        match self {
+            UsageInfo::Zhipu(info) => info.render_menu_items(app, info.provider(), is_selected),
+            UsageInfo::Kimi(info) => info.render_menu_items(app, info.provider(), is_selected),
+        }
     }
 }
 

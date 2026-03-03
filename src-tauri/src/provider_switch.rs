@@ -1,5 +1,5 @@
 use crate::error::Result;
-use crate::models::Provider;
+use crate::models::{Provider, get_provider_by_id};
 use log::{error, info};
 use serde_json::Value;
 use std::fs;
@@ -89,13 +89,13 @@ pub fn merge_settings(provider: Provider) -> Result<()> {
         let merged_content = serde_json::to_string_pretty(&merged)?;
         fs::write(&claude_settings_path, merged_content)?;
         
-        info!("成功合并 {} 的配置到 ~/.claude/settings.json", provider.display_name());
+        info!("成功合并 {} 的配置到 ~/.claude/settings.json", provider.display_name);
     } else {
-        info!("{} 的 settings.json 不存在，仅更新选中状态", provider.display_name());
+        info!("{} 的 settings.json 不存在，仅更新选中状态", provider.display_name);
     }
     
     let mut state = load_selection_state();
-    state.selected_provider = Some(provider.provider_id().to_string());
+    state.selected_provider = Some(provider.id.to_string());
     save_selection_state(&state)?;
     
     Ok(())
@@ -121,5 +121,5 @@ fn merge_json(base: &Value, overlay: &Value) -> Value {
 pub fn get_current_selected_provider() -> Option<Provider> {
     let state = load_selection_state();
     info!("当前选中状态: {:?}", state.selected_provider);
-    Provider::from_provider_id(state.selected_provider.as_deref()?)
+    get_provider_by_id(state.selected_provider.as_deref()?)
 }

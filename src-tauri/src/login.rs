@@ -34,7 +34,7 @@ pub fn run_login_script(provider: Provider) -> Result<()> {
         path_with_target
     };
 
-    let platform_arg = provider.login_script_arg();
+    let platform_arg = provider.login_script_arg;
 
     let output = std::process::Command::new(&sidecar_path)
         .arg(platform_arg)

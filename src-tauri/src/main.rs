@@ -1,13 +1,14 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use am_i_in_debt::{
-    api::fetch_usage_for_provider,
+    fetch_all_usage,
+    fetch_usage_for_provider,
     login::run_login_script,
     merge_settings,
     models::Provider,
     state::AppState,
     update_menu,
-    UsageInfo,
+    get_provider_by_id,
 };
 use log::info;
 use tauri::{
@@ -72,34 +73,18 @@ fn main() {
         .expect("error while running tauri application");
 }
 
-async fn fetch_all_usage() -> Vec<UsageInfo> {
-    let mut usage_list = Vec::new();
-
-    for provider in Provider::ALL {
-        if let Some(info) = fetch_usage_for_provider(provider).await {
-            usage_list.push(info);
-        }
-    }
-
-    usage_list
-}
-
 fn handle_menu_event(app: &tauri::AppHandle, event: tauri::menu::MenuEvent) {
     let event_id = event.id.as_ref();
 
-    if event_id.starts_with("select-") {
-        let provider_id = event_id.strip_prefix("select-").unwrap();
-        if let Some(provider) = Provider::from_provider_id(provider_id) {
+    if let Some(provider_id) = event_id.strip_prefix("select-") {
+        if let Some(provider) = get_provider_by_id(provider_id) {
             handle_select_provider(app, provider);
         }
         return;
     }
 
-    if event_id.starts_with("login-") || event_id.starts_with("relogin-") {
-        let provider_id = event_id.strip_prefix("login-")
-            .or_else(|| event_id.strip_prefix("relogin-"))
-            .unwrap();
-        if let Some(provider) = Provider::from_provider_id(provider_id) {
+    if let Some(provider_id) = event_id.strip_prefix("login-").or_else(|| event_id.strip_prefix("relogin-")) {
+        if let Some(provider) = get_provider_by_id(provider_id) {
             handle_login(app, provider);
         }
         return;
@@ -117,10 +102,10 @@ fn handle_menu_event(app: &tauri::AppHandle, event: tauri::menu::MenuEvent) {
 }
 
 fn handle_select_provider(app: &tauri::AppHandle, provider: Provider) {
-    info!("选择 {} Coding Plan", provider.display_name());
+    info!("选择 {} Coding Plan", provider.display_name);
     
     if let Err(e) = merge_settings(provider) {
-        log::error!("切换到{}失败: {}", provider.display_name(), e);
+        log::error!("切换到{}失败: {}", provider.display_name, e);
         return;
     }
     
@@ -135,7 +120,7 @@ fn handle_login(app: &tauri::AppHandle, provider: Provider) {
     let app_handle = app.clone();
     tauri::async_runtime::spawn(async move {
         if let Err(e) = run_login_script(provider) {
-            log::error!("登录{}失败: {}", provider.display_name(), e);
+            log::error!("登录{}失败: {}", provider.display_name, e);
             return;
         }
 
@@ -145,7 +130,7 @@ fn handle_login(app: &tauri::AppHandle, provider: Provider) {
             let state: tauri::State<AppState> = app_handle.state();
             let mut usage_list = state.get_usage();
             
-            usage_list.retain(|u| u.provider() != provider);
+            usage_list.retain(|u| u.provider_id() != provider.id);
             
             usage_list.push(info);
             update_menu(&app_handle, &usage_list);
