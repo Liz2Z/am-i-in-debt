@@ -1,0 +1,16 @@
+{
+  "name": "get-cookies-script",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "bun build --compile src/index.ts --outfile ../src-tauri/bin/get-zhipu-cookies && bun build --compile src/kimi.ts --outfile ../src-tauri/bin/get-kimi-cookies",
+    "dev:zhipu": "bun run src/index.ts",
+    "dev:kimi": "bun run src/kimi.ts"
+  },
+  "dependencies": {
+    "chrome-remote-interface": "^0.33.2"
+  },
+  "devDependencies": {
+    "@types/chrome-remote-interface": "^0.33.0"
+  }
+}
