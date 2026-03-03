@@ -18,7 +18,7 @@ fn main() {
     tauri::Builder::default()
         .manage(AppState::new())
         .setup(|app| {
-            let tray_icon = include_bytes!("../icons/icon.png");
+            let tray_icon = include_bytes!("../icons/tray-icon.png");
             let icon = tauri::image::Image::from_bytes(&tray_icon.to_vec())
                 .expect("Failed to load tray icon");
 
