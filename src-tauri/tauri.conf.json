@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Coding Plan Usage Tray",
+  "productName": "Am I In Debt",
   "version": "1.0.0",
-  "identifier": "com.zhipu.usage-tray",
+  "identifier": "com.foxmail.fitz-i.am-i-in-debt",
   "build": {
     "beforeDevCommand": "",
     "beforeBuildCommand": ""
@@ -15,9 +15,7 @@
       "icons/128x128@2x.png",
       "icons/icon.icns"
     ],
-    "externalBin": [
-      "bin/get-cookies"
-    ]
+    "externalBin": ["bin/get-cookies"]
   },
   "app": {
     "windows": [],

@@ -552,7 +552,7 @@ fn update_menu(app: &tauri::AppHandle, usage_list: &[UsageInfo]) {
     // 根据登录状态构建不同的菜单
     let menu = if usage_list.is_empty() {
         // 没有登录任何 plan
-        let header = MenuItem::with_id(app, "header", "Coding Plan Usage", true, None::<&str>).unwrap();
+        let header = MenuItem::with_id(app, "header", "Am I In Debt ?", true, None::<&str>).unwrap();
         let sep1 = PredefinedMenuItem::separator(app).unwrap();
         let login_zhipu = MenuItem::with_id(app, "login-zhipu", "登录智谱 Coding Plan", true, None::<&str>).unwrap();
         let login_kimi = MenuItem::with_id(app, "login-kimi", "登录 Kimi Coding Plan", true, None::<&str>).unwrap();
@@ -565,7 +565,7 @@ fn update_menu(app: &tauri::AppHandle, usage_list: &[UsageInfo]) {
         )
     } else {
         // 先创建所有菜单项
-        let header = MenuItem::with_id(app, "header", "Coding Plan Usage", true, None::<&str>).unwrap();
+        let header = MenuItem::with_id(app, "header", "Am I In Debt ?", true, None::<&str>).unwrap();
         let sep1 = PredefinedMenuItem::separator(app).unwrap();
 
         let mut items: Vec<Box<dyn tauri::menu::IsMenuItem<_> + '_>> = vec![
@@ -775,7 +775,7 @@ fn main() {
             let menu = Menu::with_items(
                 app,
                 &[
-                    &MenuItem::with_id(app, "header", "Coding Plan Usage", true, None::<&str>).unwrap(),
+                    &MenuItem::with_id(app, "header", "Am I In Debt ?", true, None::<&str>).unwrap(),
                     &PredefinedMenuItem::separator(app).unwrap(),
                     &MenuItem::with_id(app, "status", "加载中...", false, None::<&str>).unwrap(),
                     &PredefinedMenuItem::separator(app).unwrap(),
