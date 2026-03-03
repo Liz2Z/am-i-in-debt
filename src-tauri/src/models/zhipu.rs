@@ -42,7 +42,7 @@ pub struct ZhipuLimit {
     pub percentage: i64,
     pub remaining: Option<i64>,
     #[serde(rename = "nextResetTime")]
-    pub next_reset_time: i64,
+    pub next_reset_time: Option<i64>,
     #[serde(rename = "usageDetails")]
     pub usage_details: Option<Vec<ZhipuUsageDetail>>,
 }
