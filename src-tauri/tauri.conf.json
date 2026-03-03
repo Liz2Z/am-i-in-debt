@@ -17,7 +17,8 @@
     ],
     "externalBin": ["bin/get-cookies"],
     "macOS": {
-      "signingIdentity": null
+      "signingIdentity": null,
+      "entitlements": "./entitlements.plist"
     }
   },
   "app": {
