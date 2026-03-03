@@ -1,7 +1,7 @@
 use std::sync::{Arc, Mutex};
 use tauri::tray::TrayIcon;
 
-use crate::models::UsageInfo;
+use crate::providers::{UsageInfo, format_last_update_time};
 
 pub struct AppState {
     pub usage_info: Arc<Mutex<Vec<UsageInfo>>>,
@@ -37,7 +37,7 @@ impl AppState {
     pub fn get_update_time_suffix(&self) -> String {
         let last_update = self.last_update_time.lock().unwrap();
         if let Some(ts) = *last_update {
-            format!(" ({})", crate::models::format_last_update_time(ts))
+            format!(" ({})", format_last_update_time(ts))
         } else {
             "".to_string()
         }

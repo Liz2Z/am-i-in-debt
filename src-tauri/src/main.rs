@@ -1,14 +1,11 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use am_i_in_debt::{
-    fetch_all_usage,
-    fetch_usage_for_provider,
     login::run_login_script,
     merge_settings,
-    models::Provider,
+    providers::{PROVIDERS, UsageInfo, get_provider_by_id},
     state::AppState,
     update_menu,
-    get_provider_by_id,
 };
 use log::info;
 use tauri::{
@@ -73,6 +70,16 @@ fn main() {
         .expect("error while running tauri application");
 }
 
+async fn fetch_all_usage() -> Vec<UsageInfo> {
+    let mut usage_list = Vec::new();
+    for provider in PROVIDERS.iter() {
+        if let Some(info) = provider.fetch_usage(provider.cookie_path()).await.ok() {
+            usage_list.push(info);
+        }
+    }
+    usage_list
+}
+
 fn handle_menu_event(app: &tauri::AppHandle, event: tauri::menu::MenuEvent) {
     let event_id = event.id.as_ref();
 
@@ -101,11 +108,11 @@ fn handle_menu_event(app: &tauri::AppHandle, event: tauri::menu::MenuEvent) {
     }
 }
 
-fn handle_select_provider(app: &tauri::AppHandle, provider: Provider) {
-    info!("选择 {} Coding Plan", provider.display_name);
+fn handle_select_provider(app: &tauri::AppHandle, provider: &dyn am_i_in_debt::providers::Provider) {
+    info!("选择 {} Coding Plan", provider.display_name());
     
     if let Err(e) = merge_settings(provider) {
-        log::error!("切换到{}失败: {}", provider.display_name, e);
+        log::error!("切换到{}失败: {}", provider.display_name(), e);
         return;
     }
     
@@ -116,21 +123,24 @@ fn handle_select_provider(app: &tauri::AppHandle, provider: Provider) {
     update_menu(app, &usage_list);
 }
 
-fn handle_login(app: &tauri::AppHandle, provider: Provider) {
+fn handle_login(app: &tauri::AppHandle, provider: &dyn am_i_in_debt::providers::Provider) {
+    let provider_id = provider.id().to_string();
     let app_handle = app.clone();
     tauri::async_runtime::spawn(async move {
-        if let Err(e) = run_login_script(provider) {
-            log::error!("登录{}失败: {}", provider.display_name, e);
+        let provider_ref = get_provider_by_id(&provider_id).unwrap();
+        
+        if let Err(e) = run_login_script(provider_ref) {
+            log::error!("登录{}失败: {}", provider_ref.display_name(), e);
             return;
         }
 
         tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
 
-        if let Some(info) = fetch_usage_for_provider(provider).await {
+        if let Some(info) = provider_ref.fetch_usage(provider_ref.cookie_path()).await.ok() {
             let state: tauri::State<AppState> = app_handle.state();
             let mut usage_list = state.get_usage();
             
-            usage_list.retain(|u| u.provider_id() != provider.id);
+            usage_list.retain(|u| u.provider_id() != provider_ref.id());
             
             usage_list.push(info);
             update_menu(&app_handle, &usage_list);

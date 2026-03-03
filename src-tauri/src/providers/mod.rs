@@ -1,12 +1,15 @@
-mod zhipu;
-mod kimi;
+pub mod zhipu;
+pub mod kimi;
 
-pub use zhipu::*;
-pub use kimi::*;
-
-use std::path::PathBuf;
 use std::collections::HashMap;
+use std::future::Future;
+use std::path::PathBuf;
+use std::pin::Pin;
 use std::sync::LazyLock;
+
+use tauri::{menu::IsMenuItem, AppHandle, Wry};
+
+use crate::error::Result;
 
 pub fn get_xdg_data_dir() -> PathBuf {
     if let Ok(xdg_data) = std::env::var("XDG_DATA_HOME") {
@@ -20,90 +23,77 @@ pub fn get_app_data_dir() -> PathBuf {
     get_xdg_data_dir().join("am-i-in-debt")
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct Provider {
-    pub id: &'static str,
-    pub display_name: &'static str,
-    pub login_script_arg: &'static str,
-}
-
-impl Provider {
-    pub const ZHIPU: Provider = Provider {
-        id: "zhipu-coding-plan",
-        display_name: "智谱",
-        login_script_arg: "zhipu",
-    };
-
-    pub const KIMI: Provider = Provider {
-        id: "kimi-coding-plan",
-        display_name: "Kimi",
-        login_script_arg: "kimi",
-    };
-
-    pub fn data_dir(&self) -> PathBuf {
-        get_app_data_dir().join(self.id)
+pub trait Provider: Send + Sync + 'static {
+    fn id(&self) -> &'static str;
+    fn display_name(&self) -> &'static str;
+    fn login_script_arg(&self) -> &'static str;
+    fn auth_token_name(&self) -> &'static str;
+    
+    fn data_dir(&self) -> PathBuf {
+        get_app_data_dir().join(self.id())
     }
-
-    pub fn cookie_path(&self) -> PathBuf {
+    
+    fn cookie_path(&self) -> PathBuf {
         self.data_dir().join("cookies.json")
     }
-}
-
-pub static PROVIDER_REGISTRY: LazyLock<HashMap<&'static str, Provider>> = LazyLock::new(|| {
-    let mut map = HashMap::new();
-    map.insert(Provider::ZHIPU.id, Provider::ZHIPU);
-    map.insert(Provider::KIMI.id, Provider::KIMI);
-    map
-});
-
-pub static ALL_PROVIDERS: LazyLock<Vec<Provider>> = LazyLock::new(|| {
-    vec![Provider::ZHIPU, Provider::KIMI]
-});
-
-pub fn get_provider_by_id(id: &str) -> Option<Provider> {
-    PROVIDER_REGISTRY.get(id).cloned()
-}
-
-pub type CodingPlan = Provider;
-
-pub trait MenuRenderable {
-    fn provider(&self) -> Provider;
+    
+    fn settings_path(&self) -> PathBuf {
+        self.data_dir().join("settings.json")
+    }
+    
+    fn fetch_usage(&self, cookie_path: PathBuf) -> Pin<Box<dyn Future<Output = Result<UsageInfo>> + Send + 'static>>;
+    
     fn render_menu_items(
         &self,
-        app: &tauri::AppHandle,
-        provider: Provider,
+        app: &AppHandle,
+        usage: &UsageInfo,
         is_selected: bool,
-    ) -> Vec<Box<dyn tauri::menu::IsMenuItem<tauri::Wry>>>;
+    ) -> Vec<Box<dyn IsMenuItem<Wry>>>;
 }
 
 #[derive(Debug, Clone)]
 pub enum UsageInfo {
-    Zhipu(ZhipuUsageInfo),
-    Kimi(KimiUsageInfo),
+    Zhipu(zhipu::ZhipuUsageInfo),
+    Kimi(kimi::KimiUsageInfo),
 }
 
 impl UsageInfo {
-    pub fn provider(&self) -> Provider {
+    pub fn provider_id(&self) -> &'static str {
         match self {
-            UsageInfo::Zhipu(info) => info.provider(),
-            UsageInfo::Kimi(info) => info.provider(),
+            UsageInfo::Zhipu(_) => zhipu::ZHIPU.id(),
+            UsageInfo::Kimi(_) => kimi::KIMI.id(),
         }
     }
-
-    pub fn provider_id(&self) -> &'static str {
-        self.provider().id
-    }
-
+    
     pub fn render_menu_items(
         &self,
-        app: &tauri::AppHandle,
+        app: &AppHandle,
         is_selected: bool,
-    ) -> Vec<Box<dyn tauri::menu::IsMenuItem<tauri::Wry>>> {
+    ) -> Vec<Box<dyn IsMenuItem<Wry>>> {
         match self {
-            UsageInfo::Zhipu(info) => info.render_menu_items(app, info.provider(), is_selected),
-            UsageInfo::Kimi(info) => info.render_menu_items(app, info.provider(), is_selected),
+            UsageInfo::Zhipu(info) => zhipu::ZHIPU.render_menu_items(app, &UsageInfo::Zhipu(info.clone()), is_selected),
+            UsageInfo::Kimi(info) => kimi::KIMI.render_menu_items(app, &UsageInfo::Kimi(info.clone()), is_selected),
         }
     }
+}
+
+pub static PROVIDERS: LazyLock<Vec<Box<dyn Provider>>> = LazyLock::new(|| {
+    vec![
+        Box::new(zhipu::ZhipuProvider),
+        Box::new(kimi::KimiProvider),
+    ]
+});
+
+pub static PROVIDER_MAP: LazyLock<HashMap<&'static str, &'static dyn Provider>> = LazyLock::new(|| {
+    let mut map = HashMap::new();
+    for provider in PROVIDERS.iter() {
+        map.insert(provider.id(), provider.as_ref());
+    }
+    map
+});
+
+pub fn get_provider_by_id(id: &str) -> Option<&'static dyn Provider> {
+    PROVIDER_MAP.get(id).copied()
 }
 
 pub fn format_progress_bar(percentage: f64) -> String {

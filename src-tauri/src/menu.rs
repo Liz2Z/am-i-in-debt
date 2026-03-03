@@ -3,7 +3,7 @@ use tauri::{
     AppHandle, Manager, Wry,
 };
 
-use crate::models::{ALL_PROVIDERS, UsageInfo};
+use crate::providers::{PROVIDERS, UsageInfo};
 use crate::state::AppState;
 use crate::provider_switch::get_current_selected_provider;
 
@@ -17,7 +17,7 @@ pub fn build_menu(app: &AppHandle, usage_list: &[UsageInfo], update_time_suffix:
     }
 }
 
-fn build_empty_menu(app: &AppHandle, selected_provider: Option<crate::models::Provider>) -> Menu<Wry> {
+fn build_empty_menu(app: &AppHandle, selected_provider_id: Option<String>) -> Menu<Wry> {
     let header = MenuItem::with_id(app, "header", "Am I In Debt ?", true, None::<&str>).unwrap();
     let sep1 = PredefinedMenuItem::separator(app).unwrap();
     
@@ -26,12 +26,12 @@ fn build_empty_menu(app: &AppHandle, selected_provider: Option<crate::models::Pr
         Box::new(sep1),
     ];
     
-    for provider in ALL_PROVIDERS.iter() {
-        let is_checked = selected_provider == Some(*provider);
+    for provider in PROVIDERS.iter() {
+        let is_checked = selected_provider_id.as_deref() == Some(provider.id());
         let item = CheckMenuItem::with_id(
             app,
-            format!("select-{}", provider.id),
-            format!("{} Coding Plan", provider.display_name),
+            format!("select-{}", provider.id()),
+            format!("{} Coding Plan", provider.display_name()),
             true,
             is_checked,
             None::<&str>,
@@ -42,11 +42,11 @@ fn build_empty_menu(app: &AppHandle, selected_provider: Option<crate::models::Pr
     let sep2 = PredefinedMenuItem::separator(app).unwrap();
     items.push(Box::new(sep2));
     
-    for provider in ALL_PROVIDERS.iter() {
+    for provider in PROVIDERS.iter() {
         let item = MenuItem::with_id(
             app,
-            format!("login-{}", provider.id),
-            format!("登录{} Coding Plan", provider.display_name),
+            format!("login-{}", provider.id()),
+            format!("登录{} Coding Plan", provider.display_name()),
             true,
             None::<&str>,
         ).unwrap();
@@ -66,7 +66,7 @@ fn build_usage_menu(
     app: &AppHandle,
     usage_list: &[UsageInfo],
     update_time_suffix: &str,
-    selected_provider: Option<crate::models::Provider>,
+    selected_provider_id: Option<String>,
 ) -> Menu<Wry> {
     let header = MenuItem::with_id(app, "header", "Am I In Debt ?", true, None::<&str>).unwrap();
     let sep1 = PredefinedMenuItem::separator(app).unwrap();
@@ -76,9 +76,9 @@ fn build_usage_menu(
         Box::new(sep1),
     ];
 
-    for provider in ALL_PROVIDERS.iter() {
-        if let Some(usage) = usage_list.iter().find(|u| u.provider_id() == provider.id) {
-            let is_selected = selected_provider == Some(*provider);
+    for provider in PROVIDERS.iter() {
+        if let Some(usage) = usage_list.iter().find(|u| u.provider_id() == provider.id()) {
+            let is_selected = selected_provider_id.as_deref() == Some(provider.id());
             let menu_items = usage.render_menu_items(app, is_selected);
             for item in menu_items {
                 items.push(item);
@@ -86,8 +86,8 @@ fn build_usage_menu(
         } else {
             items.push(Box::new(MenuItem::with_id(
                 app,
-                format!("login-{}", provider.id),
-                format!("登录{} Coding Plan", provider.display_name),
+                format!("login-{}", provider.id()),
+                format!("登录{} Coding Plan", provider.display_name()),
                 true,
                 None::<&str>,
             ).unwrap()));
@@ -97,12 +97,12 @@ fn build_usage_menu(
     items.push(Box::new(PredefinedMenuItem::separator(app).unwrap()));
     items.push(Box::new(MenuItem::with_id(app, "refresh", format!("刷新{}", update_time_suffix), true, None::<&str>).unwrap()));
 
-    for provider in ALL_PROVIDERS.iter() {
-        if usage_list.iter().any(|u| u.provider_id() == provider.id) {
+    for provider in PROVIDERS.iter() {
+        if usage_list.iter().any(|u| u.provider_id() == provider.id()) {
             items.push(Box::new(MenuItem::with_id(
                 app,
-                format!("relogin-{}", provider.id),
-                format!("重新登录{}", provider.display_name),
+                format!("relogin-{}", provider.id()),
+                format!("重新登录{}", provider.display_name()),
                 true,
                 None::<&str>,
             ).unwrap()));
