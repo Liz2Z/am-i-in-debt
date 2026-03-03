@@ -2,7 +2,7 @@ use std::fs;
 use std::path::PathBuf;
 
 use crate::error::{AppError, Result};
-use crate::providers::Provider;
+use crate::provider::Provider;
 
 fn get_sidecar_path() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))

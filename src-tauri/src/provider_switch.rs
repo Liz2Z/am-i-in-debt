@@ -1,5 +1,5 @@
 use crate::error::Result;
-use crate::providers::{Provider, get_app_data_dir};
+use crate::provider::{Provider, get_app_data_dir};
 use log::{error, info};
 use serde_json::Value;
 use std::fs;

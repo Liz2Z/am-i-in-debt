@@ -1,3 +1,4 @@
+pub mod provider;
 pub mod providers;
 pub mod error;
 pub mod login;
@@ -5,7 +6,8 @@ pub mod menu;
 pub mod provider_switch;
 pub mod state;
 
-pub use providers::{Provider, UsageInfo, PROVIDERS, get_provider_by_id};
+pub use provider::{Provider, UsageInfo};
+pub use providers::{PROVIDERS, get_provider_by_id};
 pub use error::{AppError, Result};
 pub use login::run_login_script;
 pub use menu::{build_menu, update_menu};

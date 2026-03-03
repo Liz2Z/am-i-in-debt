@@ -10,7 +10,7 @@ use tauri::{
 };
 
 use crate::error::{AppError, Result};
-use super::{format_progress_bar, format_iso_time, Provider, UsageInfo};
+use crate::provider::{format_progress_bar, format_iso_time, Provider, ProviderRegistry, UsageInfo};
 
 pub const KIMI_ID: &str = "kimi-coding-plan";
 pub const KIMI_DISPLAY_NAME: &str = "Kimi";
@@ -61,7 +61,7 @@ impl Provider for KimiProvider {
             
             if let Ok(error_response) = serde_json::from_str::<serde_json::Value>(&response_text) {
                 if error_response.get("code").and_then(|c| c.as_str()) == Some("unauthenticated") {
-                    let _ = fs::remove_file(cookie_path);
+                    let _ = fs::remove_file(&cookie_path);
                     return Err(AppError::Auth("Token 已失效，请重新登录".to_string()));
                 }
             }
@@ -156,6 +156,8 @@ impl Provider for KimiProvider {
 }
 
 pub static KIMI: KimiProvider = KimiProvider;
+
+inventory::submit!(ProviderRegistry(&KIMI));
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KimiUsageInfo {

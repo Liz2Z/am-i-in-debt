@@ -9,7 +9,7 @@ use tauri::{
 };
 
 use crate::error::{AppError, Result};
-use super::{format_progress_bar, format_timestamp_js, Provider, UsageInfo};
+use crate::provider::{format_progress_bar, format_timestamp_js, Provider, ProviderRegistry, UsageInfo};
 
 pub const ZHIPU_ID: &str = "zhipu-coding-plan";
 pub const ZHIPU_DISPLAY_NAME: &str = "智谱";
@@ -152,6 +152,8 @@ impl Provider for ZhipuProvider {
 }
 
 pub static ZHIPU: ZhipuProvider = ZhipuProvider;
+
+inventory::submit!(ProviderRegistry(&ZHIPU));
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ZhipuUsageInfo {

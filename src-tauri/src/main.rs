@@ -3,7 +3,8 @@
 use am_i_in_debt::{
     login::run_login_script,
     merge_settings,
-    providers::{PROVIDERS, UsageInfo, get_provider_by_id},
+    provider::UsageInfo,
+    providers::{PROVIDERS, get_provider_by_id},
     state::AppState,
     update_menu,
 };
@@ -108,7 +109,7 @@ fn handle_menu_event(app: &tauri::AppHandle, event: tauri::menu::MenuEvent) {
     }
 }
 
-fn handle_select_provider(app: &tauri::AppHandle, provider: &dyn am_i_in_debt::providers::Provider) {
+fn handle_select_provider(app: &tauri::AppHandle, provider: &dyn am_i_in_debt::provider::Provider) {
     info!("选择 {} Coding Plan", provider.display_name());
     
     if let Err(e) = merge_settings(provider) {
@@ -123,7 +124,7 @@ fn handle_select_provider(app: &tauri::AppHandle, provider: &dyn am_i_in_debt::p
     update_menu(app, &usage_list);
 }
 
-fn handle_login(app: &tauri::AppHandle, provider: &dyn am_i_in_debt::providers::Provider) {
+fn handle_login(app: &tauri::AppHandle, provider: &dyn am_i_in_debt::provider::Provider) {
     let provider_id = provider.id().to_string();
     let app_handle = app.clone();
     tauri::async_runtime::spawn(async move {

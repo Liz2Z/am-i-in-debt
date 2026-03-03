@@ -3,7 +3,8 @@ use tauri::{
     AppHandle, Manager, Wry,
 };
 
-use crate::providers::{PROVIDERS, UsageInfo};
+use crate::provider::UsageInfo;
+use crate::providers::PROVIDERS;
 use crate::state::AppState;
 use crate::provider_switch::get_current_selected_provider;
 

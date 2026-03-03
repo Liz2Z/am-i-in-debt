@@ -1,7 +1,7 @@
 use std::sync::{Arc, Mutex};
 use tauri::tray::TrayIcon;
 
-use crate::providers::{UsageInfo, format_last_update_time};
+use crate::provider::{UsageInfo, format_last_update_time};
 
 pub struct AppState {
     pub usage_info: Arc<Mutex<Vec<UsageInfo>>>,
