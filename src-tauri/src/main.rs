@@ -218,6 +218,7 @@ impl UsageInfo {
 struct AppState {
     usage_info: Arc<Mutex<Vec<UsageInfo>>>,
     tray: Arc<Mutex<Option<TrayIcon>>>,
+    last_update_time: Arc<Mutex<Option<i64>>>,
 }
 
 // ========== 工具函数 ==========
@@ -270,6 +271,28 @@ fn format_iso_time(iso_time: &str) -> String {
                 .to_string()
         })
         .unwrap_or_else(|_| "未知".to_string())
+}
+
+// 格式化最近更新时间（显示 HH:MM:SS）
+fn format_last_update_time(timestamp_ms: i64) -> String {
+    if timestamp_ms == 0 {
+        return "".to_string();
+    }
+    let ts_sec = timestamp_ms / 1000;
+    use chrono_tz::Asia::Shanghai;
+    chrono::DateTime::<chrono::Utc>::from_timestamp(ts_sec, 0)
+        .unwrap_or_default()
+        .with_timezone(&Shanghai)
+        .format("%H:%M:%S")
+        .to_string()
+}
+
+// 更新最后更新时间
+fn update_last_update_time(state: &tauri::State<AppState>) {
+    use chrono::Utc;
+    let now = Utc::now();
+    let timestamp_ms = now.timestamp_millis();
+    *state.last_update_time.lock().unwrap() = Some(timestamp_ms);
 }
 
 // ========== API 调用函数 ==========
@@ -545,6 +568,18 @@ fn update_menu(app: &tauri::AppHandle, usage_list: &[UsageInfo]) {
     let mut info = state.usage_info.lock().unwrap();
     *info = usage_list.to_vec();
 
+    // 更新最后更新时间
+    update_last_update_time(&state);
+
+    // 获取最后更新时间
+    let last_update = state.last_update_time.lock().unwrap();
+    let update_time_suffix = if let Some(ts) = *last_update {
+        format!(" ({})", format_last_update_time(ts))
+    } else {
+        "".to_string()
+    };
+    drop(last_update);
+
     // 检查哪些 plan 已登录
     let zhipu_logged_in = usage_list.iter().any(|u| u.is_zhipu());
     let kimi_logged_in = usage_list.iter().any(|u| u.is_kimi());
@@ -731,7 +766,7 @@ fn update_menu(app: &tauri::AppHandle, usage_list: &[UsageInfo]) {
 
         // 添加通用菜单项
         items.push(Box::new(PredefinedMenuItem::separator(app).unwrap()));
-        items.push(Box::new(MenuItem::with_id(app, "refresh", "刷新", true, None::<&str>).unwrap()));
+        items.push(Box::new(MenuItem::with_id(app, "refresh", format!("刷新{}", update_time_suffix), true, None::<&str>).unwrap()));
 
         if zhipu_logged_in {
             items.push(Box::new(MenuItem::with_id(app, "relogin-zhipu", "重新登录智谱", true, None::<&str>).unwrap()));
@@ -764,6 +799,7 @@ fn main() {
         .manage(AppState {
             usage_info: Arc::new(Mutex::new(Vec::new())),
             tray: tray_state.clone(),
+            last_update_time: Arc::new(Mutex::new(None)),
         })
         .setup(|app| {
             // 加载托盘图标
