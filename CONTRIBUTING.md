@@ -47,11 +47,61 @@ bun run tauri:dev
 
 ### 添加新的 Coding Plan 支持
 
-1. 在 `get-cookies-script/src/` 创建新的登录脚本（如 `newplan.ts`）
-2. 在 `src-tauri/src/api/` 添加 API 客户端
-3. 在 `src-tauri/src/models/` 添加数据结构
-4. 更新 `CodingPlan` 枚举
+应用使用 **Provider 模式**，添加新 provider 只需创建一个文件：
+
+1. 创建 `src/providers/newplan.rs`，实现 `Provider` trait
+2. 在文件末尾使用 `inventory::submit!` 自注册
+3. 在 `providers/mod.rs` 添加 `pub mod newplan;`
+4. 在 `get-cookies-script/src/` 创建登录脚本（如 `newplan.ts`）
 5. 更新文档
+
+#### Provider Trait 接口
+
+```rust
+pub trait Provider: Send + Sync + 'static {
+    fn id(&self) -> &'static str;              // provider 唯一标识
+    fn display_name(&self) -> &'static str;    // 显示名称
+    fn login_script_arg(&self) -> &'static str; // 登录脚本参数
+    fn auth_token_name(&self) -> &'static str;  // 认证 token 名称
+    
+    fn fetch_usage(&self, cookie_path: PathBuf) -> Pin<Box<dyn Future<Output = Result<UsageInfo>> + Send + 'static>>;
+    fn render_menu_items(&self, app: &AppHandle, usage: &UsageInfo, is_selected: bool) -> Vec<Box<dyn IsMenuItem<Wry>>>;
+}
+```
+
+#### 示例 Provider 实现
+
+```rust
+use crate::provider::{Provider, ProviderRegistry, UsageInfo};
+use crate::error::Result;
+
+pub const NEW_PROVIDER_ID: &str = "new-provider-id";
+pub const NEW_PROVIDER_DISPLAY_NAME: &str = "新供应商";
+pub const NEW_PROVIDER_LOGIN_ARG: &str = "new-provider";
+pub const NEW_PROVIDER_AUTH_TOKEN: &str = "auth_token";
+
+pub struct NewProvider;
+
+impl Provider for NewProvider {
+    fn id(&self) -> &'static str { NEW_PROVIDER_ID }
+    fn display_name(&self) -> &'static str { NEW_PROVIDER_DISPLAY_NAME }
+    fn login_script_arg(&self) -> &'static str { NEW_PROVIDER_LOGIN_ARG }
+    fn auth_token_name(&self) -> &'static str { NEW_PROVIDER_AUTH_TOKEN }
+    
+    fn fetch_usage(&self, cookie_path: PathBuf) -> Pin<Box<dyn Future<Output = Result<UsageInfo>> + Send + 'static>> {
+        // 实现 API 调用
+    }
+    
+    fn render_menu_items(&self, app: &AppHandle, usage: &UsageInfo, is_selected: bool) -> Vec<Box<dyn IsMenuItem<Wry>>> {
+        // 实现菜单渲染
+    }
+}
+
+pub static NEW_PROVIDER: NewProvider = NewProvider;
+
+// 自注册
+inventory::submit!(ProviderRegistry(&NEW_PROVIDER));
+```
 
 ## 许可证
 

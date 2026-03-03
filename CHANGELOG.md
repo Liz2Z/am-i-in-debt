@@ -17,7 +17,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Auto-refresh every 30 seconds
 - Manual refresh support
 
+### Changed
+- **Architecture Refactoring**: Migrated to Provider pattern with self-registration
+  - Each provider is now a self-contained module with all its logic
+  - Uses `inventory` crate for automatic provider registration
+  - Adding a new provider only requires creating a single file
+  - Eliminated hardcoded `zhipu`/`kimi` references throughout the codebase
+  - Provider trait provides unified interface: `id()`, `display_name()`, `login_script_arg()`, `auth_token_name()`, `fetch_usage()`, `render_menu_items()`
+
 ### Technical Details
 - Built with Tauri 2.x + Rust
-- Modular code architecture
+- Provider pattern architecture with `inventory` crate for self-registration
 - Unified sidecar binary for cookie retrieval

@@ -31,30 +31,28 @@
 am-i-in-debt/
 ├── src-tauri/
 │   ├── src/
-│   │   ├── main.rs        # 应用入口
-│   │   ├── lib.rs         # 库导出
-│   │   ├── api/           # API 客户端
-│   │   │   ├── mod.rs
-│   │   │   ├── zhipu.rs
-│   │   │   └── kimi.rs
-│   │   ├── models/        # 数据结构
-│   │   │   ├── mod.rs
-│   │   │   ├── zhipu.rs
-│   │   │   └── kimi.rs
-│   │   ├── menu.rs        # 菜单逻辑
-│   │   ├── state.rs       # 状态管理
-│   │   ├── login.rs       # 登录逻辑
-│   │   └── error.rs       # 统一错误类型
+│   │   ├── main.rs           # 应用入口
+│   │   ├── lib.rs            # 库导出
+│   │   ├── provider.rs       # Provider trait 和公共工具函数
+│   │   ├── providers/        # Provider 实现（自包含模块）
+│   │   │   ├── mod.rs        # 从 inventory 收集注册的 provider
+│   │   │   ├── zhipu.rs      # 智谱 provider（完全自包含）
+│   │   │   └── kimi.rs       # Kimi provider（完全自包含）
+│   │   ├── menu.rs           # 菜单逻辑
+│   │   ├── state.rs          # 状态管理
+│   │   ├── login.rs          # 登录逻辑
+│   │   ├── provider_switch.rs # Provider 切换逻辑
+│   │   └── error.rs          # 统一错误类型
 │   ├── bin/
-│   │   └── get-cookies    # 统一的 cookie 获取脚本
-│   ├── icons/             # 应用图标
+│   │   └── get-cookies       # 统一的 cookie 获取脚本
+│   ├── icons/                # 应用图标
 │   └── Cargo.toml
 ├── get-cookies-script/
 │   ├── src/
-│   │   ├── index.ts       # 统一入口（根据参数调用）
-│   │   ├── chrome.ts      # 公共 Chrome 启动逻辑
-│   │   ├── zhipu.ts       # 智谱登录逻辑
-│   │   └── kimi.ts        # Kimi 登录逻辑
+│   │   ├── index.ts          # 统一入口（根据参数调用）
+│   │   ├── chrome.ts         # 公共 Chrome 启动逻辑
+│   │   ├── zhipu.ts          # 智谱登录逻辑
+│   │   └── kimi.ts           # Kimi 登录逻辑
 │   ├── tsconfig.json
 │   └── package.json
 └── README.md
@@ -154,7 +152,11 @@ MCP 额度（每月）
       "limits": [
         {
           "window": { "duration": 300, "timeUnit": "TIME_UNIT_MINUTE" },
-          "detail": { "limit": "100", "remaining": "100", "resetTime": "2026-03-02T19:20:59.199525Z" }
+          "detail": {
+            "limit": "100",
+            "remaining": "100",
+            "resetTime": "2026-03-02T19:20:59.199525Z"
+          }
         }
       ]
     }
@@ -239,6 +241,7 @@ bun run dev:kimi   # 测试 Kimi
 ### 构建产物
 
 构建完成后，产物位于：
+
 - **App**: `src-tauri/target/release/bundle/macos/Am I In Debt.app`
 - **DMG**: `src-tauri/target/release/bundle/dmg/Am I In Debt_1.0.0_aarch64.dmg`
 
