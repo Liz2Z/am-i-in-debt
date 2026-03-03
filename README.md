@@ -7,6 +7,8 @@
 
 一个 macOS 状态栏应用，用于监控多个 Coding Plan（智谱、Kimi）的使用情况。
 
+![Screenshot](image.png)
+
 ## 功能特性
 
 - 🍎 **纯状态栏应用**：不在 Dock 栏显示图标
