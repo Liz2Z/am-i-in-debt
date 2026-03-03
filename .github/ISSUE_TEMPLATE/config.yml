@@ -1,0 +1,7 @@
+---
+name: Config file for Issue forms
+blank_issues_enabled: false
+contact_links:
+  - name: GitHub Issues
+    url: https://github.com/your-username/am-i-in-debt/issues
+    about: Please ask questions via GitHub Issues
