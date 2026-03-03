@@ -15,7 +15,10 @@
       "icons/128x128@2x.png",
       "icons/icon.icns"
     ],
-    "externalBin": ["bin/get-cookies"]
+    "externalBin": ["bin/get-cookies"],
+    "macOS": {
+      "signingIdentity": null
+    }
   },
   "app": {
     "windows": [],

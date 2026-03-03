@@ -1,4 +1,4 @@
-# Coding Plan Usage Monitor
+# Am I In Debt
 
 一个 macOS 状态栏应用，用于监控多个 Coding Plan（智谱、Kimi）的使用情况。
 
@@ -8,12 +8,12 @@
 - 📊 **多平台支持**：支持智谱 Coding Plan 和 Kimi Coding Plan
 - 🔐 **自动化登录**：使用 Chrome DevTools Protocol 自动获取 cookies
 - 📈 **使用情况展示**：显示已用/总计/剩余 tokens、进度条、重置时间
-- 🔄 **自动刷新**：每 30 秒自动更新数据
-- 💾 **XDG 规范存储**：数据存储在 `~/.local/share/coding-plan-usage/`
+- 🔄 **自动刷新**：每 30 秒自动更新数据，支持手动刷新
+- 💾 **XDG 规范存储**：数据存储在 `~/.local/share/am-i-in-debt/`
 
 ## 技术栈
 
-- **前端框架**：Tauri 2.x
+- **应用框架**：Tauri 2.x
 - **后端语言**：Rust
 - **脚本语言**：TypeScript (Bun runtime)
 - **浏览器自动化**：Chrome DevTools Protocol (`chrome-remote-interface`)
@@ -21,19 +21,34 @@
 ## 项目结构
 
 ```
-coding-plan-usage/
+am-i-in-debt/
 ├── src-tauri/
 │   ├── src/
-│   │   └── main.rs          # 主应用代码 (Rust)
+│   │   ├── main.rs        # 应用入口
+│   │   ├── lib.rs         # 库导出
+│   │   ├── api/           # API 客户端
+│   │   │   ├── mod.rs
+│   │   │   ├── zhipu.rs
+│   │   │   └── kimi.rs
+│   │   ├── models/        # 数据结构
+│   │   │   ├── mod.rs
+│   │   │   ├── zhipu.rs
+│   │   │   └── kimi.rs
+│   │   ├── menu.rs        # 菜单逻辑
+│   │   ├── state.rs       # 状态管理
+│   │   ├── login.rs       # 登录逻辑
+│   │   └── error.rs       # 统一错误类型
 │   ├── bin/
-│   │   ├── get-zhipu-cookies # 智谱 cookie 获取脚本 (编译后)
-│   │   └── get-kimi-cookies  # Kimi cookie 获取脚本 (编译后)
-│   ├── icons/                # 托盘图标
+│   │   └── get-cookies    # 统一的 cookie 获取脚本
+│   ├── icons/             # 应用图标
 │   └── Cargo.toml
 ├── get-cookies-script/
 │   ├── src/
-│   │   ├── index.ts          # 智谱 cookie 获取脚本源码
-│   │   └── kimi.ts           # Kimi cookie 获取脚本源码
+│   │   ├── index.ts       # 统一入口（根据参数调用）
+│   │   ├── chrome.ts      # 公共 Chrome 启动逻辑
+│   │   ├── zhipu.ts       # 智谱登录逻辑
+│   │   └── kimi.ts        # Kimi 登录逻辑
+│   ├── tsconfig.json
 │   └── package.json
 └── README.md
 ```
@@ -43,7 +58,7 @@ coding-plan-usage/
 按照 XDG Base Directory Specification，数据存储在：
 
 ```
-~/.local/share/coding-plan-usage/
+~/.local/share/am-i-in-debt/
 ├── zhipu-coding-plan/
 │   └── cookies.json
 └── kimi-coding-plan/
@@ -69,34 +84,24 @@ coding-plan-usage/
     "limits": [
       {
         "type": "TIME_LIMIT",
-        "unit": 5, // 月
-        "number": 1, // 代表“每个月的 MCP 使用额度“
-        "usage": 100, // 已使用 100 次
-        "currentValue": 101,
+        "unit": 5,
+        "number": 1,
+        "usage": 100,
         "remaining": 0,
         "percentage": 100,
-        "nextResetTime": 1772764847997, // 额度重置时间的时间戳
+        "nextResetTime": 1772764847997,
         "usageDetails": [
-          {
-            "modelCode": "search-prime", // 搜索 mcp
-            "usage": 79 // 使用了 79 次
-          },
-          {
-            "modelCode": "web-reader", // 网页读取 mcp
-            "usage": 22
-          },
-          {
-            "modelCode": "zread",
-            "usage": 0
-          }
+          { "modelCode": "search-prime", "usage": 79 },
+          { "modelCode": "web-reader", "usage": 22 },
+          { "modelCode": "zread", "usage": 0 }
         ]
       },
       {
         "type": "TOKENS_LIMIT",
-        "unit": 3, // 小时
-        "number": 5, // 代表“每 5 小时使用额度“
-        "percentage": 69, // 使用额度比例
-        "nextResetTime": 1772473296701 // 额度重置时间的时间戳
+        "unit": 3,
+        "number": 5,
+        "percentage": 69,
+        "nextResetTime": 1772473296701
       }
     ],
     "level": "lite"
@@ -105,17 +110,17 @@ coding-plan-usage/
 }
 ```
 
-### 智谱 信息展示
+### 智谱信息展示
 
 ```text
 Token 额度（每 x 小时）
 [进度条] 百分比数值
 重置: 26-01-02 13:00:00
-------------------------
+-------------------------
 MCP 额度（每月）
 [进度条] 百分比数值
-搜索: xx | 网页: xx | zreader: xxx
-重置: 26-01-02 13: 00: 00
+搜索: xx | 网页: xx | 阅读: xxx
+重置: 26-01-02 13:00:00
 ```
 
 ### Kimi Coding Plan
@@ -141,15 +146,8 @@ MCP 额度（每月）
       },
       "limits": [
         {
-          "window": {
-            "duration": 300,
-            "timeUnit": "TIME_UNIT_MINUTE"
-          },
-          "detail": {
-            "limit": "100",
-            "remaining": "100",
-            "resetTime": "2026-03-02T19:20:59.199525Z"
-          }
+          "window": { "duration": 300, "timeUnit": "TIME_UNIT_MINUTE" },
+          "detail": { "limit": "100", "remaining": "100", "resetTime": "2026-03-02T19:20:59.199525Z" }
         }
       ]
     }
@@ -157,24 +155,31 @@ MCP 额度（每月）
 }
 ```
 
-**说明**：
-
-- `detail`：本周使用量
-- `limits[0].detail`：5 小时窗口使用量（应用显示此数据）
-
-### KIMI 信息展示
+### Kimi 信息展示
 
 ```text
-Token 额度（每 {limits[0].window.duration/60} 小时）
-[进度条] {limits[0].detail.limit - limits[0].detail.remaining} %
-重置: {limits[0].detail.resetTime} 
-------------------------
+Token 额度（每 5 小时）
+[进度条] 使用百分比
+重置: 重置时间
+-------------------------
 Token 额度（每周）
-[进度条] {detail.used}%
-重置: {detail.resetTime}
+[进度条] 使用百分比
+重置: 重置时间
 ```
 
 ## 登录流程
+
+### 统一登录脚本
+
+应用使用单一 sidecar 二进制文件，通过参数区分平台：
+
+```bash
+# 智谱登录
+get-cookies zhipu
+
+# Kimi 登录
+get-cookies kimi
+```
 
 ### 智谱 Coding Plan 登录
 
@@ -188,22 +193,12 @@ Token 额度（每周）
 
 1. 启动 Chrome（临时用户数据目录，端口 9223）
 2. 打开 `https://www.kimi.com/code/console`
-3. 清理可能占用端口的进程
-4. 等待用户完成登录
-5. **每 3 秒检查一次**：
+3. 等待用户完成登录
+4. 每 3 秒检查一次：
    - 使用 CDP 获取 `kimi-auth` cookie（包括 HttpOnly）
    - 调用 usage 接口验证 token
    - 直到接口返回有效数据
-6. 保存 cookies
-
-### CDP Cookie 获取
-
-```typescript
-// 获取特定域名的 cookies（包括 HttpOnly）
-const cookies = await Network.getCookies({
-  urls: ["https://www.kimi.com/"],
-});
-```
+5. 保存 cookies
 
 ## 开发指南
 
@@ -214,58 +209,31 @@ const cookies = await Network.getCookies({
 - Bun
 - Chrome 浏览器
 
-### 构建步骤
-
-1. **编译 cookie 获取脚本**：
+### 开发命令
 
 ```bash
-cd get-cookies-script
-bun run build
+# 安装依赖
+bun install
+
+# 构建 sidecar
+bun run build:sidecar
+
+# 开发模式运行
+bun run tauri:dev
+
+# 构建发布版本
+bun run tauri:build
+
+# 开发模式测试登录脚本
+bun run dev:zhipu  # 测试智谱
+bun run dev:kimi   # 测试 Kimi
 ```
 
-2. **运行开发版本**：
+### 构建产物
 
-```bash
-cd src-tauri
-cargo run
-```
-
-3. **构建发布版本**：
-
-```bash
-cd src-tauri
-cargo build --release
-```
-
-### 添加新的 Coding Plan
-
-1. 在 `get-cookies-script/src/` 创建新的登录脚本
-2. 在 `src-tauri/src/main.rs` 添加新的 `CodingPlan` 枚举值
-3. 实现对应的 API 调用逻辑
-4. 更新 `package.json` 的 build 脚本
-
-## 配置文件
-
-### Tauri 配置 (`src-tauri/tauri.conf.json`)
-
-```json
-{
-  "app": {
-    "windows": [],
-    "macOSPrivateApi": true
-  }
-}
-```
-
-### Cargo.toml 关键依赖
-
-```toml
-[dependencies]
-tauri = { version = "2", features = ["tray-icon", "image-ico", "image-png", "macos-private-api"] }
-serde = { version = "1", features = ["derive"] }
-reqwest = { version = "0.12", features = ["json"] }
-chrono = "0.4"
-```
+构建完成后，产物位于：
+- **App**: `src-tauri/target/release/bundle/macos/Am I In Debt.app`
+- **DMG**: `src-tauri/target/release/bundle/dmg/Am I In Debt_1.0.0_aarch64.dmg`
 
 ## 故障排除
 
