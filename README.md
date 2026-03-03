@@ -1,5 +1,10 @@
 # Am I In Debt
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Platform: macOS](https://img.shields.io/badge/Platform-macOS-lightgrey.svg)](https://www.apple.com/macos)
+[![Rust](https://img.shields.io/badge/Rust-1.70%2B-orange.svg)](https://www.rust-lang.org/)
+[![Bun](https://img.shields.io/badge/Bun-1.0%2B-black.svg)](https://bun.sh/)
+
 一个 macOS 状态栏应用，用于监控多个 Coding Plan（智谱、Kimi）的使用情况。
 
 ## 功能特性
