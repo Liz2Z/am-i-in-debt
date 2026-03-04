@@ -8,7 +8,7 @@ use crate::providers::PROVIDERS;
 use crate::state::AppState;
 use crate::provider_switch::get_current_selected_provider;
 
-pub fn build_menu(app: &AppHandle, usage_list: &[UsageInfo], update_time_suffix: &str) -> Menu<Wry> {
+pub fn build_menu(app: &AppHandle, usage_list: &[Box<dyn UsageInfo>], update_time_suffix: &str) -> Menu<Wry> {
     let selected_provider = get_current_selected_provider();
     
     if usage_list.is_empty() {
@@ -65,7 +65,7 @@ fn build_empty_menu(app: &AppHandle, selected_provider_id: Option<String>) -> Me
 
 fn build_usage_menu(
     app: &AppHandle,
-    usage_list: &[UsageInfo],
+    usage_list: &[Box<dyn UsageInfo>],
     update_time_suffix: &str,
     selected_provider_id: Option<String>,
 ) -> Menu<Wry> {
@@ -117,16 +117,17 @@ fn build_usage_menu(
     Menu::with_items(app, &items_refs).unwrap()
 }
 
-pub fn update_menu(app: &AppHandle, usage_list: &[UsageInfo]) {
+pub fn update_menu(app: &AppHandle, usage_list: Vec<Box<dyn UsageInfo>>) {
     let state: tauri::State<AppState> = app.state();
-    state.update_usage(usage_list.to_vec());
-    state.update_time();
+    state.update_usage_and_get(usage_list, |list| {
+        state.update_time();
 
-    let update_time_suffix = state.get_update_time_suffix();
+        let update_time_suffix = state.get_update_time_suffix();
 
-    let menu = build_menu(app, usage_list, &update_time_suffix);
+        let menu = build_menu(app, list, &update_time_suffix);
 
-    if let Some(tray) = state.get_tray() {
-        let _ = tray.set_menu(Some(menu));
-    }
+        if let Some(tray) = state.get_tray() {
+            let _ = tray.set_menu(Some(menu));
+        }
+    });
 }

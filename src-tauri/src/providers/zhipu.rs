@@ -24,7 +24,7 @@ impl Provider for ZhipuProvider {
     fn login_script_arg(&self) -> &'static str { ZHIPU_LOGIN_ARG }
     fn auth_token_name(&self) -> &'static str { ZHIPU_AUTH_TOKEN }
     
-    fn fetch_usage(&self, cookie_path: PathBuf) -> Pin<Box<dyn Future<Output = Result<UsageInfo>> + Send + 'static>> {
+    fn fetch_usage(&self, cookie_path: PathBuf) -> Pin<Box<dyn Future<Output = Result<Box<dyn UsageInfo>>> + Send + 'static>> {
         Box::pin(async move {
             let cookies = read_cookies(&cookie_path)?;
             let token = find_cookie_value(&cookies, ZHIPU_AUTH_TOKEN)
@@ -65,89 +65,8 @@ impl Provider for ZhipuProvider {
                 .ok_or(AppError::Parse("未找到 token 配额信息".to_string()))?;
             
             let info = build_usage_info(token_limit, time_limit);
-            Ok(UsageInfo::Zhipu(info))
+            Ok(Box::new(info) as Box<dyn UsageInfo>)
         })
-    }
-    
-    fn render_menu_items(
-        &self,
-        app: &AppHandle,
-        usage: &UsageInfo,
-        is_selected: bool,
-    ) -> Vec<Box<dyn IsMenuItem<Wry>>> {
-        let UsageInfo::Zhipu(info) = usage else { return vec![] };
-        let mut items: Vec<Box<dyn IsMenuItem<Wry>>> = Vec::new();
-        
-        items.push(Box::new(CheckMenuItem::with_id(
-            app,
-            format!("select-{}", self.id()),
-            format!("{} Coding Plan", self.display_name()),
-            true,
-            is_selected,
-            None::<&str>,
-        ).unwrap()));
-        
-        items.push(Box::new(MenuItem::with_id(
-            app,
-            format!("{}-token-title", self.id()),
-            format!("Token 额度（每 {} 小时）", info.token_hours),
-            false,
-            None::<&str>,
-        ).unwrap()));
-        items.push(Box::new(MenuItem::with_id(
-            app,
-            format!("{}-token-bar", self.id()),
-            format_progress_bar(info.token_percentage),
-            false,
-            None::<&str>,
-        ).unwrap()));
-        items.push(Box::new(MenuItem::with_id(
-            app,
-            format!("{}-token-reset", self.id()),
-            format!("重置: {}", info.token_reset_time),
-            false,
-            None::<&str>,
-        ).unwrap()));
-        
-        items.push(Box::new(MenuItem::with_id(
-            app,
-            format!("{}-sep", self.id()),
-            "-".repeat(25),
-            false,
-            None::<&str>,
-        ).unwrap()));
-        
-        items.push(Box::new(MenuItem::with_id(
-            app,
-            format!("{}-mcp-title", self.id()),
-            "MCP 额度（每月）",
-            false,
-            None::<&str>,
-        ).unwrap()));
-        items.push(Box::new(MenuItem::with_id(
-            app,
-            format!("{}-mcp-bar", self.id()),
-            format_progress_bar(info.mcp_percentage as f64),
-            false,
-            None::<&str>,
-        ).unwrap()));
-        items.push(Box::new(MenuItem::with_id(
-            app,
-            format!("{}-mcp-detail", self.id()),
-            format!("搜索: {} | 网页: {} | 阅读: {}", info.mcp_search, info.mcp_web, info.mcp_zread),
-            false,
-            None::<&str>,
-        ).unwrap()));
-        items.push(Box::new(MenuItem::with_id(
-            app,
-            format!("{}-mcp-reset", self.id()),
-            format!("重置: {}", info.mcp_reset_time),
-            false,
-            None::<&str>,
-        ).unwrap()));
-        items.push(Box::new(PredefinedMenuItem::separator(app).unwrap()));
-        
-        items
     }
 }
 
@@ -171,6 +90,99 @@ pub struct ZhipuUsageInfo {
     pub mcp_search: i64,
     pub mcp_web: i64,
     pub mcp_zread: i64,
+}
+
+impl UsageInfo for ZhipuUsageInfo {
+    fn provider_id(&self) -> &'static str {
+        ZHIPU_ID
+    }
+    
+    fn is_token_exhausted(&self) -> bool {
+        self.token_remaining <= 0 || self.token_percentage >= 100.0
+    }
+    
+    fn render_menu_items(
+        &self,
+        app: &AppHandle,
+        is_selected: bool,
+    ) -> Vec<Box<dyn IsMenuItem<Wry>>> {
+        let mut items: Vec<Box<dyn IsMenuItem<Wry>>> = Vec::new();
+        
+        items.push(Box::new(CheckMenuItem::with_id(
+            app,
+            format!("select-{}", ZHIPU_ID),
+            format!("{} Coding Plan", ZHIPU_DISPLAY_NAME),
+            true,
+            is_selected,
+            None::<&str>,
+        ).unwrap()));
+        
+        items.push(Box::new(MenuItem::with_id(
+            app,
+            format!("{}-token-title", ZHIPU_ID),
+            format!("Token 额度（每 {} 小时）", self.token_hours),
+            false,
+            None::<&str>,
+        ).unwrap()));
+        items.push(Box::new(MenuItem::with_id(
+            app,
+            format!("{}-token-bar", ZHIPU_ID),
+            format_progress_bar(self.token_percentage),
+            false,
+            None::<&str>,
+        ).unwrap()));
+        items.push(Box::new(MenuItem::with_id(
+            app,
+            format!("{}-token-reset", ZHIPU_ID),
+            format!("重置: {}", self.token_reset_time),
+            false,
+            None::<&str>,
+        ).unwrap()));
+        
+        items.push(Box::new(MenuItem::with_id(
+            app,
+            format!("{}-sep", ZHIPU_ID),
+            "-".repeat(25),
+            false,
+            None::<&str>,
+        ).unwrap()));
+        
+        items.push(Box::new(MenuItem::with_id(
+            app,
+            format!("{}-mcp-title", ZHIPU_ID),
+            "MCP 额度（每月）",
+            false,
+            None::<&str>,
+        ).unwrap()));
+        items.push(Box::new(MenuItem::with_id(
+            app,
+            format!("{}-mcp-bar", ZHIPU_ID),
+            format_progress_bar(self.mcp_percentage as f64),
+            false,
+            None::<&str>,
+        ).unwrap()));
+        items.push(Box::new(MenuItem::with_id(
+            app,
+            format!("{}-mcp-detail", ZHIPU_ID),
+            format!("搜索: {} | 网页: {} | 阅读: {}", self.mcp_search, self.mcp_web, self.mcp_zread),
+            false,
+            None::<&str>,
+        ).unwrap()));
+        items.push(Box::new(MenuItem::with_id(
+            app,
+            format!("{}-mcp-reset", ZHIPU_ID),
+            format!("重置: {}", self.mcp_reset_time),
+            false,
+            None::<&str>,
+        ).unwrap()));
+        items.push(Box::new(PredefinedMenuItem::separator(app).unwrap()));
+        
+        items
+    }
+    
+    fn clone_boxed(&self) -> Box<dyn UsageInfo> {
+        Box::new(self.clone())
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]

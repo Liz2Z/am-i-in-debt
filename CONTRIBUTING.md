@@ -47,60 +47,119 @@ bun run tauri:dev
 
 ### 添加新的 Coding Plan 支持
 
-应用使用 **Provider 模式**，添加新 provider 只需创建一个文件：
+应用使用 **Provider 模式**，添加新 provider 只需创建一个文件。详细步骤请参考 [providers/README.md](../src-tauri/src/providers/README.md)。
 
-1. 创建 `src/providers/newplan.rs`，实现 `Provider` trait
-2. 在文件末尾使用 `inventory::submit!` 自注册
-3. 在 `providers/mod.rs` 添加 `pub mod newplan;`
-4. 在 `get-cookies-script/src/` 创建登录脚本（如 `newplan.ts`）
-5. 更新文档
+简要步骤：
 
-#### Provider Trait 接口
+1. 在 `src-tauri/src/providers/` 创建新文件（如 `newplan.rs`）
+2. 实现 `Provider` trait
+3. 实现 `UsageInfo` trait
+4. 使用 `inventory::submit!` 注册
+5. 在 `mod.rs` 添加 `pub mod newplan;`
+6. 在 `get-cookies-script/src/` 创建登录脚本（如 `newplan.ts`）
+
+**无需修改其他任何文件！**
+
+#### 核心 Traits
 
 ```rust
+// Provider Trait
 pub trait Provider: Send + Sync + 'static {
     fn id(&self) -> &'static str;              // provider 唯一标识
     fn display_name(&self) -> &'static str;    // 显示名称
     fn login_script_arg(&self) -> &'static str; // 登录脚本参数
     fn auth_token_name(&self) -> &'static str;  // 认证 token 名称
-    
-    fn fetch_usage(&self, cookie_path: PathBuf) -> Pin<Box<dyn Future<Output = Result<UsageInfo>> + Send + 'static>>;
-    fn render_menu_items(&self, app: &AppHandle, usage: &UsageInfo, is_selected: bool) -> Vec<Box<dyn IsMenuItem<Wry>>>;
+
+    fn fetch_usage(&self, cookie_path: PathBuf) -> Pin<Box<dyn Future<Output = Result<Box<dyn UsageInfo>>> + Send + 'static>>;
+}
+
+// UsageInfo Trait
+pub trait UsageInfo: Send + Sync + 'static {
+    fn provider_id(&self) -> &'static str;     // 返回对应的 provider id
+    fn is_token_exhausted(&self) -> bool;      // 判断 token 是否耗尽
+    fn render_menu_items(&self, app: &AppHandle, is_selected: bool) -> Vec<Box<dyn IsMenuItem<Wry>>>;
+    fn clone_boxed(&self) -> Box<dyn UsageInfo>;
 }
 ```
 
 #### 示例 Provider 实现
 
 ```rust
-use crate::provider::{Provider, ProviderRegistry, UsageInfo};
-use crate::error::Result;
+use std::path::PathBuf;
+use std::pin::Pin;
+use std::future::Future;
 
-pub const NEW_PROVIDER_ID: &str = "new-provider-id";
-pub const NEW_PROVIDER_DISPLAY_NAME: &str = "新供应商";
+use tauri::{
+    menu::{CheckMenuItem, IsMenuItem, MenuItem, PredefinedMenuItem},
+    AppHandle, Wry,
+};
+
+use crate::error::{AppError, Result};
+use crate::provider::{Provider, ProviderRegistry, UsageInfo};
+
+pub const NEW_PROVIDER_ID: &str = "new-provider-coding-plan";
+pub const NEW_PROVIDER_DISPLAY_NAME: &str = "NewProvider";
 pub const NEW_PROVIDER_LOGIN_ARG: &str = "new-provider";
 pub const NEW_PROVIDER_AUTH_TOKEN: &str = "auth_token";
 
-pub struct NewProvider;
+pub struct NewProviderProvider;
 
-impl Provider for NewProvider {
+impl Provider for NewProviderProvider {
     fn id(&self) -> &'static str { NEW_PROVIDER_ID }
     fn display_name(&self) -> &'static str { NEW_PROVIDER_DISPLAY_NAME }
     fn login_script_arg(&self) -> &'static str { NEW_PROVIDER_LOGIN_ARG }
     fn auth_token_name(&self) -> &'static str { NEW_PROVIDER_AUTH_TOKEN }
-    
-    fn fetch_usage(&self, cookie_path: PathBuf) -> Pin<Box<dyn Future<Output = Result<UsageInfo>> + Send + 'static>> {
-        // 实现 API 调用
-    }
-    
-    fn render_menu_items(&self, app: &AppHandle, usage: &UsageInfo, is_selected: bool) -> Vec<Box<dyn IsMenuItem<Wry>>> {
-        // 实现菜单渲染
+
+    fn fetch_usage(&self, cookie_path: PathBuf) -> Pin<Box<dyn Future<Output = Result<Box<dyn UsageInfo>>> + Send + 'static>> {
+        Box::pin(async move {
+            // 1. 读取 cookies
+            // 2. 调用 API 获取用量
+            // 3. 返回 Box::new(info) as Box<dyn UsageInfo>
+            todo!()
+        })
     }
 }
 
-pub static NEW_PROVIDER: NewProvider = NewProvider;
+pub static NEW_PROVIDER: NewProviderProvider = NewProviderProvider;
 
-// 自注册
 inventory::submit!(ProviderRegistry(&NEW_PROVIDER));
+
+#[derive(Debug, Clone)]
+pub struct NewProviderUsageInfo {
+    pub token_remaining: i64,
+    // ... 其他字段
+}
+
+impl UsageInfo for NewProviderUsageInfo {
+    fn provider_id(&self) -> &'static str {
+        NEW_PROVIDER_ID
+    }
+
+    fn is_token_exhausted(&self) -> bool {
+        self.token_remaining <= 0
+    }
+
+    fn render_menu_items(&self, app: &AppHandle, is_selected: bool) -> Vec<Box<dyn IsMenuItem<Wry>>> {
+        let mut items = Vec::new();
+
+        items.push(Box::new(CheckMenuItem::with_id(
+            app,
+            format!("select-{}", NEW_PROVIDER_ID),
+            format!("{} Coding Plan", NEW_PROVIDER_DISPLAY_NAME),
+            true,
+            is_selected,
+            None::<&str>,
+        ).unwrap()));
+
+        // 添加更多菜单项...
+
+        items
+    }
+
+    fn clone_boxed(&self) -> Box<dyn UsageInfo> {
+        Box::new(self.clone())
+    }
+}
 ```
 
 ## 许可证

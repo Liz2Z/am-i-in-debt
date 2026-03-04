@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Real-time usage display with progress bars
 - Auto-refresh every 30 seconds
 - Manual refresh support
+- Token exhaustion notification for currently selected provider
+  - Sends macOS notification when token is exhausted
+  - Only notifies once per exhaustion event
+  - Resets notification when token recovers
 
 ### Changed
 - **Architecture Refactoring**: Migrated to Provider pattern with self-registration
@@ -23,9 +27,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Uses `inventory` crate for automatic provider registration
   - Adding a new provider only requires creating a single file
   - Eliminated hardcoded `zhipu`/`kimi` references throughout the codebase
-  - Provider trait provides unified interface: `id()`, `display_name()`, `login_script_arg()`, `auth_token_name()`, `fetch_usage()`, `render_menu_items()`
+- **UsageInfo Refactoring**: Converted from enum to trait
+  - `UsageInfo` is now a trait instead of an enum
+  - Each provider implements its own `UsageInfo` trait
+  - Added `clone_boxed()` method for trait object cloning
+  - Removed redundant `Provider.render_menu_items()` method
+  - Menu rendering is now fully handled by `UsageInfo.render_menu_items()`
 
 ### Technical Details
 - Built with Tauri 2.x + Rust
 - Provider pattern architecture with `inventory` crate for self-registration
 - Unified sidecar binary for cookie retrieval
+- Two core traits: `Provider` and `UsageInfo`

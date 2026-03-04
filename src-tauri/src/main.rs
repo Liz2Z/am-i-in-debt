@@ -7,6 +7,7 @@ use am_i_in_debt::{
     providers::{PROVIDERS, get_provider_by_id},
     state::AppState,
     update_menu,
+    get_current_selected_provider,
 };
 use log::info;
 use tauri::{
@@ -53,7 +54,8 @@ fn main() {
             let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 let usage_list = fetch_all_usage().await;
-                update_menu(&app_handle, &usage_list);
+                update_menu(&app_handle, usage_list);
+                check_exhausted_notification(&app_handle);
             });
 
             let app_handle = app.handle().clone();
@@ -61,7 +63,8 @@ fn main() {
                 loop {
                     tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
                     let usage_list = fetch_all_usage().await;
-                    update_menu(&app_handle, &usage_list);
+                    update_menu(&app_handle, usage_list);
+                    check_exhausted_notification(&app_handle);
                 }
             });
 
@@ -71,7 +74,7 @@ fn main() {
         .expect("error while running tauri application");
 }
 
-async fn fetch_all_usage() -> Vec<UsageInfo> {
+async fn fetch_all_usage() -> Vec<Box<dyn UsageInfo>> {
     let mut usage_list = Vec::new();
     for provider in PROVIDERS.iter() {
         if let Some(info) = provider.fetch_usage(provider.cookie_path()).await.ok() {
@@ -79,6 +82,41 @@ async fn fetch_all_usage() -> Vec<UsageInfo> {
         }
     }
     usage_list
+}
+
+fn check_exhausted_notification(app: &tauri::AppHandle) {
+    let selected_provider_id = get_current_selected_provider();
+    
+    if let Some(provider_id) = selected_provider_id {
+        let state: tauri::State<AppState> = app.state();
+        
+        state.with_usage(|usage_list| {
+            if let Some(usage) = usage_list.iter().find(|u| u.provider_id() == provider_id) {
+                if usage.is_token_exhausted() {
+                    if state.should_notify_exhausted(&provider_id) {
+                        if let Some(provider) = get_provider_by_id(&provider_id) {
+                            send_notification(
+                                &format!("{} Token 耗尽", provider.display_name()),
+                                "Token 额度已用完，请等待重置或切换到其他平台"
+                            );
+                        }
+                    }
+                } else {
+                    state.clear_exhausted_notification(&provider_id);
+                }
+            }
+        });
+    }
+}
+
+fn send_notification(title: &str, body: &str) {
+    let _ = std::process::Command::new("osascript")
+        .arg("-e")
+        .arg(format!(
+            r#"display notification "{}" with title "{}""#,
+            body, title
+        ))
+        .spawn();
 }
 
 fn handle_menu_event(app: &tauri::AppHandle, event: tauri::menu::MenuEvent) {
@@ -120,8 +158,10 @@ fn handle_select_provider(app: &tauri::AppHandle, provider: &dyn am_i_in_debt::p
     info!("切换成功，重新构建菜单");
     
     let state: tauri::State<AppState> = app.state();
-    let usage_list = state.get_usage();
-    update_menu(app, &usage_list);
+    state.with_usage(|usage_list| {
+        let cloned: Vec<Box<dyn UsageInfo>> = usage_list.iter().map(|u| u.clone_boxed()).collect();
+        update_menu(app, cloned);
+    });
 }
 
 fn handle_login(app: &tauri::AppHandle, provider: &dyn am_i_in_debt::provider::Provider) {
@@ -139,12 +179,15 @@ fn handle_login(app: &tauri::AppHandle, provider: &dyn am_i_in_debt::provider::P
 
         if let Some(info) = provider_ref.fetch_usage(provider_ref.cookie_path()).await.ok() {
             let state: tauri::State<AppState> = app_handle.state();
-            let mut usage_list = state.get_usage();
-            
-            usage_list.retain(|u| u.provider_id() != provider_ref.id());
-            
-            usage_list.push(info);
-            update_menu(&app_handle, &usage_list);
+            state.with_usage(|usage_list| {
+                let mut new_list: Vec<Box<dyn UsageInfo>> = usage_list
+                    .iter()
+                    .filter(|u| u.provider_id() != provider_ref.id())
+                    .map(|u| u.clone_boxed())
+                    .collect();
+                new_list.push(info);
+                update_menu(&app_handle, new_list);
+            });
         }
     });
 }
@@ -153,6 +196,7 @@ fn handle_refresh(app: &tauri::AppHandle) {
     let app_handle = app.clone();
     tauri::async_runtime::spawn(async move {
         let usage_list = fetch_all_usage().await;
-        update_menu(&app_handle, &usage_list);
+        update_menu(&app_handle, usage_list);
+        check_exhausted_notification(&app_handle);
     });
 }

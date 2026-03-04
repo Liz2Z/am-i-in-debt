@@ -14,6 +14,7 @@
 - 🔐 **自动化登录**：使用 Chrome DevTools Protocol 自动获取 cookies
 - 📈 **使用情况展示**：显示已用/总计/剩余 tokens、进度条、重置时间
 - 🔄 **自动刷新**：每 30 秒自动更新数据，支持手动刷新
+- 🔔 **耗尽通知**：Token 耗尽时发送 macOS 通知提醒
 - 💾 **XDG 规范存储**：数据存储在 `~/.local/share/am-i-in-debt/`
 
 ## 支持的平台

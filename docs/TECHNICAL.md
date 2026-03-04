@@ -8,11 +8,12 @@ am-i-in-debt/
 │   ├── src/
 │   │   ├── main.rs           # 应用入口
 │   │   ├── lib.rs            # 库导出
-│   │   ├── provider.rs       # Provider trait 和公共工具函数
+│   │   ├── provider.rs       # Provider trait, UsageInfo trait 和公共工具函数
 │   │   ├── providers/        # Provider 实现（自包含模块）
 │   │   │   ├── mod.rs        # 从 inventory 收集注册的 provider
 │   │   │   ├── zhipu.rs      # 智谱 provider（完全自包含）
-│   │   │   └── kimi.rs       # Kimi provider（完全自包含）
+│   │   │   ├── kimi.rs       # Kimi provider（完全自包含）
+│   │   │   └── README.md     # Provider 开发指南
 │   │   ├── menu.rs           # 菜单逻辑
 │   │   ├── state.rs          # 状态管理
 │   │   ├── login.rs          # 登录逻辑
@@ -191,11 +192,13 @@ get-cookies kimi
 
 应用使用 **Provider 模式** 实现多平台支持，每个 Provider 是一个完全自包含的模块：
 
-- `provider.rs` - 定义 `Provider` trait 和公共工具函数
+- `provider.rs` - 定义 `Provider` trait、`UsageInfo` trait 和公共工具函数
 - `providers/*.rs` - 每个 provider 实现所有逻辑（API、数据模型、菜单渲染）
 - 使用 `inventory` crate 实现 provider 自注册
 
-### Provider Trait 接口
+### 核心 Traits
+
+#### Provider Trait
 
 ```rust
 pub trait Provider: Send + Sync + 'static {
@@ -203,12 +206,67 @@ pub trait Provider: Send + Sync + 'static {
     fn display_name(&self) -> &'static str;    // 显示名称
     fn login_script_arg(&self) -> &'static str; // 登录脚本参数
     fn auth_token_name(&self) -> &'static str;  // 认证 token 名称
-    
-    fn fetch_usage(&self, cookie_path: PathBuf) -> Pin<Box<dyn Future<Output = Result<UsageInfo>> + Send + 'static>>;
-    fn render_menu_items(&self, app: &AppHandle, usage: &UsageInfo, is_selected: bool) -> Vec<Box<dyn IsMenuItem<Wry>>>;
+
+    // 以下方法有默认实现
+    fn data_dir(&self) -> PathBuf;             // 数据目录
+    fn cookie_path(&self) -> PathBuf;          // cookie 文件路径
+    fn settings_path(&self) -> PathBuf;        // 设置文件路径
+
+    // 必须实现
+    fn fetch_usage(&self, cookie_path: PathBuf) -> Pin<Box<dyn Future<Output = Result<Box<dyn UsageInfo>>> + Send + 'static>>;
 }
+```
+
+#### UsageInfo Trait
+
+```rust
+pub trait UsageInfo: Send + Sync + 'static {
+    fn provider_id(&self) -> &'static str;     // 返回对应的 provider id
+    fn is_token_exhausted(&self) -> bool;      // 判断 token 是否耗尽
+    fn render_menu_items(&self, app: &AppHandle, is_selected: bool) -> Vec<Box<dyn IsMenuItem<Wry>>>;
+    fn clone_boxed(&self) -> Box<dyn UsageInfo>; // 克隆方法
+}
+```
+
+### 自注册机制
+
+使用 `inventory` crate 实现编译期自注册：
+
+```rust
+// provider.rs
+pub struct ProviderRegistry(pub &'static dyn Provider);
+inventory::collect!(ProviderRegistry);
+
+// providers/zhipu.rs
+pub static ZHIPU: ZhipuProvider = ZhipuProvider;
+inventory::submit!(ProviderRegistry(&ZHIPU));
+
+// providers/mod.rs
+pub static PROVIDERS: LazyLock<Vec<&'static dyn Provider>> = LazyLock::new(|| {
+    inventory::iter::<ProviderRegistry>().into_iter().map(|r| r.0).collect()
+});
 ```
 
 ### 添加新 Provider
 
-详细步骤请参考 [CONTRIBUTING.md](../CONTRIBUTING.md)。
+详细步骤请参考 [providers/README.md](../src-tauri/src/providers/README.md)。
+
+简要步骤：
+
+1. 在 `providers/` 目录创建新文件（如 `new_provider.rs`）
+2. 实现 `Provider` trait
+3. 实现 `UsageInfo` trait
+4. 使用 `inventory::submit!` 注册
+5. 在 `mod.rs` 添加 `pub mod new_provider;`
+
+**无需修改任何其他文件！**
+
+## Token 耗尽通知
+
+当当前选中的 provider token 耗尽时，应用会发送 macOS 通知：
+
+- 只在首次耗尽时通知一次
+- 当 token 恢复后重置通知状态
+- 下次耗尽时会再次通知
+
+通知逻辑在 `main.rs` 的 `check_exhausted_notification` 函数中实现。

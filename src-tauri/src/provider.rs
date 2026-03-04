@@ -18,6 +18,18 @@ pub fn get_app_data_dir() -> PathBuf {
     get_xdg_data_dir().join("am-i-in-debt")
 }
 
+pub trait UsageInfo: Send + Sync + 'static {
+    fn provider_id(&self) -> &'static str;
+    fn is_token_exhausted(&self) -> bool;
+    fn render_menu_items(
+        &self,
+        app: &AppHandle,
+        is_selected: bool,
+    ) -> Vec<Box<dyn IsMenuItem<Wry>>>;
+    
+    fn clone_boxed(&self) -> Box<dyn UsageInfo>;
+}
+
 pub trait Provider: Send + Sync + 'static {
     fn id(&self) -> &'static str;
     fn display_name(&self) -> &'static str;
@@ -36,45 +48,12 @@ pub trait Provider: Send + Sync + 'static {
         self.data_dir().join("settings.json")
     }
     
-    fn fetch_usage(&self, cookie_path: PathBuf) -> Pin<Box<dyn Future<Output = Result<UsageInfo>> + Send + 'static>>;
-    
-    fn render_menu_items(
-        &self,
-        app: &AppHandle,
-        usage: &UsageInfo,
-        is_selected: bool,
-    ) -> Vec<Box<dyn IsMenuItem<Wry>>>;
+    fn fetch_usage(&self, cookie_path: PathBuf) -> Pin<Box<dyn Future<Output = Result<Box<dyn UsageInfo>>> + Send + 'static>>;
 }
 
 pub struct ProviderRegistry(pub &'static dyn Provider);
 
 inventory::collect!(ProviderRegistry);
-
-#[derive(Debug, Clone)]
-pub enum UsageInfo {
-    Zhipu(crate::providers::zhipu::ZhipuUsageInfo),
-    Kimi(crate::providers::kimi::KimiUsageInfo),
-}
-
-impl UsageInfo {
-    pub fn provider_id(&self) -> &'static str {
-        match self {
-            UsageInfo::Zhipu(_) => crate::providers::zhipu::ZHIPU.id(),
-            UsageInfo::Kimi(_) => crate::providers::kimi::KIMI.id(),
-        }
-    }
-    
-    pub fn render_menu_items(
-        &self,
-        app: &AppHandle,
-        is_selected: bool,
-    ) -> Vec<Box<dyn IsMenuItem<Wry>>> {
-        match self {
-            UsageInfo::Zhipu(info) => crate::providers::zhipu::ZHIPU.render_menu_items(app, &UsageInfo::Zhipu(info.clone()), is_selected),
-            UsageInfo::Kimi(info) => crate::providers::kimi::KIMI.render_menu_items(app, &UsageInfo::Kimi(info.clone()), is_selected),
-        }
-    }
-}
 
 pub fn format_progress_bar(percentage: f64) -> String {
     let pct = percentage.min(100.0);

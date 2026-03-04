@@ -25,7 +25,7 @@ impl Provider for KimiProvider {
     fn login_script_arg(&self) -> &'static str { KIMI_LOGIN_ARG }
     fn auth_token_name(&self) -> &'static str { KIMI_AUTH_TOKEN }
     
-    fn fetch_usage(&self, cookie_path: PathBuf) -> Pin<Box<dyn Future<Output = Result<UsageInfo>> + Send + 'static>> {
+    fn fetch_usage(&self, cookie_path: PathBuf) -> Pin<Box<dyn Future<Output = Result<Box<dyn UsageInfo>>> + Send + 'static>> {
         Box::pin(async move {
             let cookies = read_cookies(&cookie_path)?;
             let auth_token = find_cookie_value(&cookies, KIMI_AUTH_TOKEN)
@@ -76,82 +76,8 @@ impl Provider for KimiProvider {
                 .ok_or(AppError::Parse("未找到 CODING 使用情况".to_string()))?;
             
             let info = build_usage_info(usage)?;
-            Ok(UsageInfo::Kimi(info))
+            Ok(Box::new(info) as Box<dyn UsageInfo>)
         })
-    }
-    
-    fn render_menu_items(
-        &self,
-        app: &AppHandle,
-        usage: &UsageInfo,
-        is_selected: bool,
-    ) -> Vec<Box<dyn IsMenuItem<Wry>>> {
-        let UsageInfo::Kimi(info) = usage else { return vec![] };
-        let mut items: Vec<Box<dyn IsMenuItem<Wry>>> = Vec::new();
-        
-        items.push(Box::new(CheckMenuItem::with_id(
-            app,
-            format!("select-{}", self.id()),
-            format!("{} Coding Plan", self.display_name()),
-            true,
-            is_selected,
-            None::<&str>,
-        ).unwrap()));
-        
-        items.push(Box::new(MenuItem::with_id(
-            app,
-            format!("{}-hourly-title", self.id()),
-            format!("Token 额度（每 {} 小时）", info.hourly_window),
-            false,
-            None::<&str>,
-        ).unwrap()));
-        items.push(Box::new(MenuItem::with_id(
-            app,
-            format!("{}-hourly-bar", self.id()),
-            format_progress_bar(info.hourly_percentage),
-            false,
-            None::<&str>,
-        ).unwrap()));
-        items.push(Box::new(MenuItem::with_id(
-            app,
-            format!("{}-hourly-reset", self.id()),
-            format!("重置: {}", info.hourly_reset_time),
-            false,
-            None::<&str>,
-        ).unwrap()));
-        
-        items.push(Box::new(MenuItem::with_id(
-            app,
-            format!("{}-sep", self.id()),
-            "-".repeat(25),
-            false,
-            None::<&str>,
-        ).unwrap()));
-        
-        items.push(Box::new(MenuItem::with_id(
-            app,
-            format!("{}-weekly-title", self.id()),
-            "Token 额度（每周）",
-            false,
-            None::<&str>,
-        ).unwrap()));
-        items.push(Box::new(MenuItem::with_id(
-            app,
-            format!("{}-weekly-bar", self.id()),
-            format_progress_bar(info.weekly_percentage),
-            false,
-            None::<&str>,
-        ).unwrap()));
-        items.push(Box::new(MenuItem::with_id(
-            app,
-            format!("{}-weekly-reset", self.id()),
-            format!("重置: {}", info.weekly_reset_time),
-            false,
-            None::<&str>,
-        ).unwrap()));
-        items.push(Box::new(PredefinedMenuItem::separator(app).unwrap()));
-        
-        items
     }
 }
 
@@ -172,6 +98,92 @@ pub struct KimiUsageInfo {
     pub weekly_remaining: i64,
     pub weekly_percentage: f64,
     pub weekly_reset_time: String,
+}
+
+impl UsageInfo for KimiUsageInfo {
+    fn provider_id(&self) -> &'static str {
+        KIMI_ID
+    }
+    
+    fn is_token_exhausted(&self) -> bool {
+        self.hourly_remaining <= 0 || self.hourly_percentage >= 100.0
+    }
+    
+    fn render_menu_items(
+        &self,
+        app: &AppHandle,
+        is_selected: bool,
+    ) -> Vec<Box<dyn IsMenuItem<Wry>>> {
+        let mut items: Vec<Box<dyn IsMenuItem<Wry>>> = Vec::new();
+        
+        items.push(Box::new(CheckMenuItem::with_id(
+            app,
+            format!("select-{}", KIMI_ID),
+            format!("{} Coding Plan", KIMI_DISPLAY_NAME),
+            true,
+            is_selected,
+            None::<&str>,
+        ).unwrap()));
+        
+        items.push(Box::new(MenuItem::with_id(
+            app,
+            format!("{}-hourly-title", KIMI_ID),
+            format!("Token 额度（每 {} 小时）", self.hourly_window),
+            false,
+            None::<&str>,
+        ).unwrap()));
+        items.push(Box::new(MenuItem::with_id(
+            app,
+            format!("{}-hourly-bar", KIMI_ID),
+            format_progress_bar(self.hourly_percentage),
+            false,
+            None::<&str>,
+        ).unwrap()));
+        items.push(Box::new(MenuItem::with_id(
+            app,
+            format!("{}-hourly-reset", KIMI_ID),
+            format!("重置: {}", self.hourly_reset_time),
+            false,
+            None::<&str>,
+        ).unwrap()));
+        
+        items.push(Box::new(MenuItem::with_id(
+            app,
+            format!("{}-sep", KIMI_ID),
+            "-".repeat(25),
+            false,
+            None::<&str>,
+        ).unwrap()));
+        
+        items.push(Box::new(MenuItem::with_id(
+            app,
+            format!("{}-weekly-title", KIMI_ID),
+            "Token 额度（每周）",
+            false,
+            None::<&str>,
+        ).unwrap()));
+        items.push(Box::new(MenuItem::with_id(
+            app,
+            format!("{}-weekly-bar", KIMI_ID),
+            format_progress_bar(self.weekly_percentage),
+            false,
+            None::<&str>,
+        ).unwrap()));
+        items.push(Box::new(MenuItem::with_id(
+            app,
+            format!("{}-weekly-reset", KIMI_ID),
+            format!("重置: {}", self.weekly_reset_time),
+            false,
+            None::<&str>,
+        ).unwrap()));
+        items.push(Box::new(PredefinedMenuItem::separator(app).unwrap()));
+        
+        items
+    }
+    
+    fn clone_boxed(&self) -> Box<dyn UsageInfo> {
+        Box::new(self.clone())
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
