@@ -45,6 +45,9 @@ jobs:
           cp src-tauri/bin/get-cookies src-tauri/bin/get-cookies-aarch64-apple-darwin
           chmod +x src-tauri/bin/get-cookies src-tauri/bin/get-cookies-aarch64-apple-darwin
 
+      - name: Verify sidecar artifact exists
+        run: test -x src-tauri/bin/get-cookies-aarch64-apple-darwin
+
       - name: Build Tauri app for macOS Apple Silicon
         run: bun run tauri build -- --target aarch64-apple-darwin
 
@@ -55,6 +58,7 @@ jobs:
           name: ${{ github.event.inputs.release_name || github.event.inputs.tag }}
           draft: false
           prerelease: false
+          fail_on_unmatched_files: true
           files: |
             src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
             src-tauri/target/aarch64-apple-darwin/release/bundle/macos/*.app.tar.gz
