@@ -11,6 +11,7 @@ export async function fetchZhipuCookies(): Promise<void> {
   let cleanupChrome: (() => void) | null = null;
 
   try {
+    console.log(`📂 Cookies 输出目录: ${outputDir}`);
     cleanupChrome = await launchChrome({ port: CDP_PORT, profileName: PROFILE_NAME });
 
     console.log("🔌 连接到 Chrome DevTools Protocol...");
@@ -68,8 +69,8 @@ export async function fetchZhipuCookies(): Promise<void> {
         if (currentUrl.includes("login")) {
           console.log("⚠️  检测到登录页面，等待用户完成登录...");
         }
-      } catch {
-        // 页面可能还在加载，忽略错误继续轮询
+      } catch (error) {
+        console.warn(`[${attempts}] 页面状态检查异常:`, error);
       }
 
       await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -93,6 +94,7 @@ export async function fetchZhipuCookies(): Promise<void> {
     console.error("❌ 发生错误:", error);
     process.exit(1);
   } finally {
+    console.log("🏁 登录脚本结束，开始资源清理");
     if (client) {
       await client.close();
     }

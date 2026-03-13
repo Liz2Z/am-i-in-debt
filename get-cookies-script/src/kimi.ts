@@ -45,6 +45,7 @@ export async function fetchKimiCookies(): Promise<void> {
   let cleanupChrome: (() => void) | null = null;
 
   try {
+    console.log(`📂 Cookies 输出目录: ${outputDir}`);
     cleanupChrome = await launchChrome({ port: CDP_PORT, profileName: PROFILE_NAME });
 
     console.log("🔌 连接到 Chrome DevTools Protocol...");
@@ -108,7 +109,7 @@ export async function fetchKimiCookies(): Promise<void> {
           console.log(`[${attempts}] ⚠️  未检测到 kimi-auth cookie，继续等待...`);
         }
       } catch (error) {
-        console.log(`[${attempts}] 检查时出错: ${error}`);
+        console.warn(`[${attempts}] 检查时出错:`, error);
       }
 
       await new Promise((resolve) => setTimeout(resolve, 3000));
@@ -132,6 +133,7 @@ export async function fetchKimiCookies(): Promise<void> {
     console.error("❌ 发生错误:", error);
     process.exit(1);
   } finally {
+    console.log("🏁 登录脚本结束，开始资源清理");
     if (client) {
       await client.close();
     }

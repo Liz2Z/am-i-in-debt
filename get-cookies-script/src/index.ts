@@ -1,11 +1,16 @@
 import { fetchZhipuCookies } from "./zhipu";
 import { fetchKimiCookies } from "./kimi";
+import { initScriptLogger } from "./logger";
 
 const args = process.argv.slice(2);
 const platform = args[0] || "zhipu";
 
 async function main() {
+  const outputDir = process.env.COOKIES_OUTPUT_PATH || process.cwd();
+  const logPath = initScriptLogger(platform, outputDir);
+
   console.log(`\n🚀 启动 ${platform} 登录流程...\n`);
+  console.log(`📝 登录脚本日志: ${logPath}`);
 
   switch (platform) {
     case "zhipu":
