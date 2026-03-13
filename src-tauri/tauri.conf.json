@@ -4,8 +4,8 @@
   "version": "1.0.0",
   "identifier": "com.am-i-in-debt.app",
   "build": {
-    "beforeDevCommand": "",
-    "beforeBuildCommand": ""
+    "beforeDevCommand": "bun run build:sidecar",
+    "beforeBuildCommand": "bun run build:sidecar"
   },
   "bundle": {
     "active": true,
@@ -16,7 +16,9 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "externalBin": ["bin/get-cookies"],
+    "externalBin": [
+      "bin/get-cookies"
+    ],
     "macOS": {
       "signingIdentity": null,
       "entitlements": "./entitlements.plist"
