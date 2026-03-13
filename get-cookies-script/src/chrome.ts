@@ -73,6 +73,8 @@ export function launchChrome(options: ChromeOptions): Promise<() => void> {
     }
 
     console.log(`🚀 启动 Chrome 浏览器...`);
+    console.log(`📍 Chrome 路径: ${chromePath}`);
+    console.log(`📍 Chrome 参数: ${args.join(" ")}`);
 
     const chromeProcess = spawn(chromePath, args, {
       detached: true,
@@ -80,9 +82,11 @@ export function launchChrome(options: ChromeOptions): Promise<() => void> {
     });
 
     chromeProcess.on("error", (err) => {
+      console.error("❌ Chrome 进程启动失败:", err);
       reject(new Error(`启动 Chrome 失败: ${err.message}`));
     });
 
+    console.log(`🧩 Chrome 进程 PID: ${chromeProcess.pid || "unknown"}`);
     chromeProcess.unref();
 
     let retries = 0;
@@ -108,11 +112,15 @@ export function launchChrome(options: ChromeOptions): Promise<() => void> {
           });
         } else if (retries >= maxRetries) {
           clearInterval(checkInterval);
+          console.error("❌ Chrome 启动超时，无法连接 DevTools");
           reject(new Error("Chrome 启动超时"));
+        } else {
+          console.log(`⏳ 等待 Chrome 就绪 (${retries}/${maxRetries})`);
         }
-      } catch {
+      } catch (error) {
         if (retries >= maxRetries) {
           clearInterval(checkInterval);
+          console.error("❌ Chrome 启动超时，连接异常:", error);
           reject(new Error("Chrome 启动超时"));
         }
       }
