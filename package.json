@@ -8,10 +8,11 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "build:sidecar": "cd get-cookies-script && bun run build",
+    "build:sidecar": "bash ./scripts/build-sidecar.sh",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build"
+    "tauri:build": "tauri build",
+    "build:sidecar:macos-arm": "bash ./scripts/build-sidecar.sh aarch64-apple-darwin"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0"

@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "build": "bun build --compile src/index.ts --outfile ../src-tauri/bin/get-cookies",
+    "build": "bash ../scripts/build-sidecar.sh",
     "dev:zhipu": "bun run src/index.ts zhipu",
     "dev:kimi": "bun run src/index.ts kimi"
   },
