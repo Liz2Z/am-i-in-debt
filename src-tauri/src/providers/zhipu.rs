@@ -56,15 +56,20 @@ impl Provider for ZhipuProvider {
             }
             
             let data = api_response.data.ok_or(AppError::Parse("响应数据为空".to_string()))?;
-            
+
             let time_limit = data.limits.iter().find(|l| l.limit_type == "TIME_LIMIT");
-            let token_limit = data
+            // 查找小时 token 额度 (unit=3)
+            let hourly_token_limit = data
                 .limits
                 .iter()
-                .find(|l| l.limit_type == "TOKENS_LIMIT")
-                .ok_or(AppError::Parse("未找到 token 配额信息".to_string()))?;
-            
-            let info = build_usage_info(token_limit, time_limit);
+                .find(|l| l.limit_type == "TOKENS_LIMIT" && l.unit == 3);
+            // 查找周 token 额度 (unit=6)
+            let weekly_token_limit = data
+                .limits
+                .iter()
+                .find(|l| l.limit_type == "TOKENS_LIMIT" && l.unit == 6);
+
+            let info = build_usage_info(hourly_token_limit, weekly_token_limit, time_limit);
             Ok(Box::new(info) as Box<dyn UsageInfo>)
         })
     }
@@ -76,12 +81,11 @@ inventory::submit!(ProviderRegistry(&ZHIPU));
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ZhipuUsageInfo {
-    pub token_total: i64,
-    pub token_used: i64,
-    pub token_remaining: i64,
     pub token_percentage: f64,
-    pub token_hours: i64,
+    pub token_period: String,
     pub token_reset_time: String,
+    pub weekly_token_percentage: f64,
+    pub weekly_token_reset_time: String,
     pub mcp_total: i64,
     pub mcp_used: i64,
     pub mcp_remaining: i64,
@@ -96,18 +100,18 @@ impl UsageInfo for ZhipuUsageInfo {
     fn provider_id(&self) -> &'static str {
         ZHIPU_ID
     }
-    
+
     fn is_token_exhausted(&self) -> bool {
-        self.token_remaining <= 0 || self.token_percentage >= 100.0
+        self.token_percentage >= 100.0
     }
-    
+
     fn render_menu_items(
         &self,
         app: &AppHandle,
         is_selected: bool,
     ) -> Vec<Box<dyn IsMenuItem<Wry>>> {
         let mut items: Vec<Box<dyn IsMenuItem<Wry>>> = Vec::new();
-        
+
         items.push(Box::new(CheckMenuItem::with_id(
             app,
             format!("select-{}", ZHIPU_ID),
@@ -116,11 +120,12 @@ impl UsageInfo for ZhipuUsageInfo {
             is_selected,
             None::<&str>,
         ).unwrap()));
-        
+
+        // 小时额度显示
         items.push(Box::new(MenuItem::with_id(
             app,
             format!("{}-token-title", ZHIPU_ID),
-            format!("Token 额度（每 {} 小时）", self.token_hours),
+            format!("Token 额度（{}）", self.token_period),
             false,
             None::<&str>,
         ).unwrap()));
@@ -138,15 +143,46 @@ impl UsageInfo for ZhipuUsageInfo {
             false,
             None::<&str>,
         ).unwrap()));
-        
+
         items.push(Box::new(MenuItem::with_id(
             app,
-            format!("{}-sep", ZHIPU_ID),
+            format!("{}-sep1", ZHIPU_ID),
             "-".repeat(25),
             false,
             None::<&str>,
         ).unwrap()));
-        
+
+        // 周额度显示
+        items.push(Box::new(MenuItem::with_id(
+            app,
+            format!("{}-weekly-token-title", ZHIPU_ID),
+            "Token 额度（每周）",
+            false,
+            None::<&str>,
+        ).unwrap()));
+        items.push(Box::new(MenuItem::with_id(
+            app,
+            format!("{}-weekly-token-bar", ZHIPU_ID),
+            format_progress_bar(self.weekly_token_percentage),
+            false,
+            None::<&str>,
+        ).unwrap()));
+        items.push(Box::new(MenuItem::with_id(
+            app,
+            format!("{}-weekly-token-reset", ZHIPU_ID),
+            format!("重置: {}", self.weekly_token_reset_time),
+            false,
+            None::<&str>,
+        ).unwrap()));
+
+        items.push(Box::new(MenuItem::with_id(
+            app,
+            format!("{}-sep2", ZHIPU_ID),
+            "-".repeat(25),
+            false,
+            None::<&str>,
+        ).unwrap()));
+
         items.push(Box::new(MenuItem::with_id(
             app,
             format!("{}-mcp-title", ZHIPU_ID),
@@ -176,10 +212,10 @@ impl UsageInfo for ZhipuUsageInfo {
             None::<&str>,
         ).unwrap()));
         items.push(Box::new(PredefinedMenuItem::separator(app).unwrap()));
-        
+
         items
     }
-    
+
     fn clone_boxed(&self) -> Box<dyn UsageInfo> {
         Box::new(self.clone())
     }
@@ -219,16 +255,50 @@ struct ZhipuUsageDetail {
     usage: i64,
 }
 
-fn build_usage_info(token_limit: &ZhipuLimit, time_limit: Option<&ZhipuLimit>) -> ZhipuUsageInfo {
-    let token_hours = (token_limit.unit * token_limit.number) / 3;
-    let token_total = token_limit.unit * token_limit.number * 1_000_000;
-    let token_used = (token_total as f64 * token_limit.percentage as f64 / 100.0) as i64;
-    let token_remaining = token_total - token_used;
-    let token_percentage = token_limit.percentage as f64;
-    let token_reset_time = token_limit.next_reset_time
-        .map(format_timestamp_js)
-        .unwrap_or_else(|| "未知".to_string());
-    
+fn build_usage_info(
+    hourly_token_limit: Option<&ZhipuLimit>,
+    weekly_token_limit: Option<&ZhipuLimit>,
+    time_limit: Option<&ZhipuLimit>,
+) -> ZhipuUsageInfo {
+    // 格式化时间周期显示
+    fn format_period(unit: i64, number: i64) -> String {
+        let unit_name = match unit {
+            3 => "小时",
+            6 => "周",
+            _ => "未知",
+        };
+        if number == 1 {
+            format!("每{}", unit_name)
+        } else {
+            format!("每 {} {}", number, unit_name)
+        }
+    }
+
+    // 处理小时 token 额度
+    let (token_percentage, token_period, token_reset_time) =
+        if let Some(tl) = hourly_token_limit {
+            let token_period = format_period(tl.unit, tl.number);
+            let token_percentage = tl.percentage as f64;
+            let token_reset_time = tl.next_reset_time
+                .map(format_timestamp_js)
+                .unwrap_or_else(|| "未知".to_string());
+            (token_percentage, token_period, token_reset_time)
+        } else {
+            (0.0, "未知".to_string(), "未知".to_string())
+        };
+
+    // 处理周 token 额度
+    let (weekly_token_percentage, weekly_token_reset_time) =
+        if let Some(tl) = weekly_token_limit {
+            let weekly_token_percentage = tl.percentage as f64;
+            let weekly_token_reset_time = tl.next_reset_time
+                .map(format_timestamp_js)
+                .unwrap_or_else(|| "未知".to_string());
+            (weekly_token_percentage, weekly_token_reset_time)
+        } else {
+            (0.0, "未知".to_string())
+        };
+
     let (mcp_total, mcp_used, mcp_remaining, mcp_percentage, mcp_reset_time, mcp_search, mcp_web, mcp_zread) =
         if let Some(tl) = time_limit {
             let mcp_total = tl.usage.unwrap_or(0) + tl.remaining.unwrap_or(0);
@@ -238,11 +308,11 @@ fn build_usage_info(token_limit: &ZhipuLimit, time_limit: Option<&ZhipuLimit>) -
             let mcp_reset_time = tl.next_reset_time
                 .map(format_timestamp_js)
                 .unwrap_or_else(|| "未知".to_string());
-            
+
             let mut mcp_search = 0;
             let mut mcp_web = 0;
             let mut mcp_zread = 0;
-            
+
             if let Some(details) = &tl.usage_details {
                 for detail in details {
                     match detail.model_code.as_str() {
@@ -253,19 +323,18 @@ fn build_usage_info(token_limit: &ZhipuLimit, time_limit: Option<&ZhipuLimit>) -
                     }
                 }
             }
-            
+
             (mcp_total, mcp_used, mcp_remaining, mcp_percentage, mcp_reset_time, mcp_search, mcp_web, mcp_zread)
         } else {
             (0, 0, 0, 0, "未知".to_string(), 0, 0, 0)
         };
-    
+
     ZhipuUsageInfo {
-        token_total,
-        token_used,
-        token_remaining,
         token_percentage,
-        token_hours,
+        token_period,
         token_reset_time,
+        weekly_token_percentage,
+        weekly_token_reset_time,
         mcp_total,
         mcp_used,
         mcp_remaining,
