@@ -17,7 +17,8 @@ permissions:
 
 jobs:
   build-and-release:
-    runs-on: macos-latest
+    # 使用 ARM64 runner，避免交叉编译问题
+    runs-on: macos-14
 
     steps:
       - name: Checkout
@@ -31,10 +32,8 @@ jobs:
         with:
           node-version: 20
 
-      - name: Setup Rust toolchain (aarch64-apple-darwin)
+      - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: aarch64-apple-darwin
 
       - name: Install frontend dependencies
         run: bun install --frozen-lockfile
@@ -43,14 +42,12 @@ jobs:
         run: bun run build:sidecar:macos-arm
 
       - name: Build Tauri app for macOS Apple Silicon
-        env:
-          TAURI_ENV_TARGET_TRIPLE: aarch64-apple-darwin
-          CARGO_BUILD_TARGET: aarch64-apple-darwin
-        run: bun run tauri build --target aarch64-apple-darwin
+        run: bun run tauri build
 
       - name: Verify sidecar bundled into app
         run: |
-          SIDECAR_PATH="src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Am I In Debt.app/Contents/Resources/get-cookies-aarch64-apple-darwin"
+          # Tauri sidecar 在 MacOS 目录，不是 Resources
+          SIDECAR_PATH="src-tauri/target/release/bundle/macos/Am I In Debt.app/Contents/MacOS/get-cookies-aarch64-apple-darwin"
           if [[ ! -f "$SIDECAR_PATH" ]]; then
             echo "Expected sidecar not found: $SIDECAR_PATH" >&2
             exit 1
@@ -65,7 +62,5 @@ jobs:
           draft: false
           prerelease: false
           files: |
-            src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
-            src-tauri/target/aarch64-apple-darwin/release/bundle/macos/*.app.tar.gz
-            src-tauri/target/aarch64-apple-darwin/release/bundle/macos/*.app.tar.gz.sig
-            src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg.sig
+            src-tauri/target/release/bundle/dmg/*.dmg
+            src-tauri/target/release/bundle/macos/*.app.tar.gz
