@@ -8,7 +8,6 @@ pub mod providers;
 pub mod state;
 
 pub use error::{AppError, Result};
-pub use login::run_login_script;
 pub use menu::{build_menu, update_menu};
 pub use provider::{Provider, UsageInfo};
 pub use provider_switch::{

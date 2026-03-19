@@ -77,6 +77,7 @@ fn main() {
 
             Ok(())
         })
+        .plugin(tauri_plugin_shell::init())
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
@@ -190,7 +191,7 @@ fn handle_login(app: &tauri::AppHandle, provider: &dyn am_i_in_debt::provider::P
         let provider_ref = get_provider_by_id(&provider_id).unwrap();
         log::info!("开始执行 {} 登录脚本", provider_ref.display_name());
 
-        if let Err(e) = run_login_script(provider_ref) {
+        if let Err(e) = run_login_script(&app_handle, provider_ref).await {
             log::error!("登录{}失败: {}", provider_ref.display_name(), e);
             return;
         }
