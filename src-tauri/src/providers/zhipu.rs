@@ -1,3 +1,46 @@
+//! 智谱 API 返回的额度数据示例：
+//! ```json
+//! {
+//!     "code": 200,
+//!     "msg": "操作成功",
+//!     "data": {
+//!         "limits": [
+//!             {
+//!                 "type": "TIME_LIMIT",      // MCP 额度
+//!                 "unit": 5,                  // 5=月
+//!                 "number": 1,                // 每月
+//!                 "usage": 1000,             // 总额度 1000 次
+//!                 "currentValue": 12,        // 使用额度 12 次
+//!                 "remaining": 988,          // 剩余额度
+//!                 "percentage": 1,           // 使用额度 1%
+//!                 "nextResetTime": 1776397506998,
+//!                 "usageDetails": [
+//!                     { "modelCode": "search-prime", "usage": 12 },
+//!                     { "modelCode": "web-reader", "usage": 0 },
+//!                     { "modelCode": "zread", "usage": 0 }
+//!                 ]
+//!             },
+//!             {
+//!                 "type": "TOKENS_LIMIT",     // 小时 token 额度
+//!                 "unit": 3,                  // 3=小时
+//!                 "number": 5,                 // 每 5 小时
+//!                 "percentage": 5,             // 使用额度 5%
+//!                 "nextResetTime": 1773920038794
+//!             },
+//!             {
+//!                 "type": "TOKENS_LIMIT",     // 周 token 额度
+//!                 "unit": 6,                  // 6=周
+//!                 "number": 1,                 // 每周
+//!                 "percentage": 32,            // 使用额度 32%
+//!                 "nextResetTime": 1774323906997
+//!             }
+//!         ],
+//!         "level": "pro"
+//!     },
+//!     "success": true
+//! }
+//! ```
+
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::future::Future;
@@ -15,6 +58,17 @@ pub const ZHIPU_ID: &str = "zhipu-coding-plan";
 pub const ZHIPU_DISPLAY_NAME: &str = "智谱";
 pub const ZHIPU_LOGIN_ARG: &str = "zhipu";
 pub const ZHIPU_AUTH_TOKEN: &str = "bigmodel_token_production";
+
+/// 时间单位枚举，对应 API 返回的 unit 字段
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TimeUnit {
+    Hours = 3,
+    Weeks = 6,
+    Month = 5,
+}
+
+/// 分隔符长度
+const SEPARATOR_LENGTH: usize = 25;
 
 pub struct ZhipuProvider;
 
@@ -58,16 +112,16 @@ impl Provider for ZhipuProvider {
             let data = api_response.data.ok_or(AppError::Parse("响应数据为空".to_string()))?;
 
             let time_limit = data.limits.iter().find(|l| l.limit_type == "TIME_LIMIT");
-            // 查找小时 token 额度 (unit=3)
+            // 查找小时 token 额度
             let hourly_token_limit = data
                 .limits
                 .iter()
-                .find(|l| l.limit_type == "TOKENS_LIMIT" && l.unit == 3);
-            // 查找周 token 额度 (unit=6)
+                .find(|l| l.limit_type == "TOKENS_LIMIT" && l.unit == TimeUnit::Hours as i64);
+            // 查找周 token 额度
             let weekly_token_limit = data
                 .limits
                 .iter()
-                .find(|l| l.limit_type == "TOKENS_LIMIT" && l.unit == 6);
+                .find(|l| l.limit_type == "TOKENS_LIMIT" && l.unit == TimeUnit::Weeks as i64);
 
             let info = build_usage_info(hourly_token_limit, weekly_token_limit, time_limit);
             Ok(Box::new(info) as Box<dyn UsageInfo>)
@@ -81,11 +135,17 @@ inventory::submit!(ProviderRegistry(&ZHIPU));
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ZhipuUsageInfo {
+    // 小时 Token 额度
     pub token_percentage: f64,
     pub token_period: String,
     pub token_reset_time: String,
+
+    // 周 Token 额度
     pub weekly_token_percentage: f64,
+    pub weekly_token_period: String,
     pub weekly_token_reset_time: String,
+
+    // MCP 额度
     pub mcp_total: i64,
     pub mcp_used: i64,
     pub mcp_remaining: i64,
@@ -147,7 +207,7 @@ impl UsageInfo for ZhipuUsageInfo {
         items.push(Box::new(MenuItem::with_id(
             app,
             format!("{}-sep1", ZHIPU_ID),
-            "-".repeat(25),
+            "-".repeat(SEPARATOR_LENGTH),
             false,
             None::<&str>,
         ).unwrap()));
@@ -156,7 +216,7 @@ impl UsageInfo for ZhipuUsageInfo {
         items.push(Box::new(MenuItem::with_id(
             app,
             format!("{}-weekly-token-title", ZHIPU_ID),
-            "Token 额度（每周）",
+            format!("Token 额度（{}）", self.weekly_token_period),
             false,
             None::<&str>,
         ).unwrap()));
@@ -178,7 +238,7 @@ impl UsageInfo for ZhipuUsageInfo {
         items.push(Box::new(MenuItem::with_id(
             app,
             format!("{}-sep2", ZHIPU_ID),
-            "-".repeat(25),
+            "-".repeat(SEPARATOR_LENGTH),
             false,
             None::<&str>,
         ).unwrap()));
@@ -186,7 +246,7 @@ impl UsageInfo for ZhipuUsageInfo {
         items.push(Box::new(MenuItem::with_id(
             app,
             format!("{}-mcp-title", ZHIPU_ID),
-            "MCP 额度（每月）",
+            format!("MCP 额度（每月 {} 次）", self.mcp_total),
             false,
             None::<&str>,
         ).unwrap()));
@@ -288,21 +348,23 @@ fn build_usage_info(
         };
 
     // 处理周 token 额度
-    let (weekly_token_percentage, weekly_token_reset_time) =
+    let (weekly_token_percentage, weekly_token_period, weekly_token_reset_time) =
         if let Some(tl) = weekly_token_limit {
+            let weekly_token_period = format_period(tl.unit, tl.number);
             let weekly_token_percentage = tl.percentage as f64;
             let weekly_token_reset_time = tl.next_reset_time
                 .map(format_timestamp_js)
                 .unwrap_or_else(|| "未知".to_string());
-            (weekly_token_percentage, weekly_token_reset_time)
+            (weekly_token_percentage, weekly_token_period, weekly_token_reset_time)
         } else {
-            (0.0, "未知".to_string())
+            (0.0, "未知".to_string(), "未知".to_string())
         };
 
     let (mcp_total, mcp_used, mcp_remaining, mcp_percentage, mcp_reset_time, mcp_search, mcp_web, mcp_zread) =
         if let Some(tl) = time_limit {
-            let mcp_total = tl.usage.unwrap_or(0) + tl.remaining.unwrap_or(0);
-            let mcp_used = tl.usage.unwrap_or(0);
+            // usage 代表总配额，remaining 代表剩余配额
+            let mcp_total = tl.usage.unwrap_or(0);
+            let mcp_used = tl.usage.unwrap_or(0) - tl.remaining.unwrap_or(0);
             let mcp_remaining = tl.remaining.unwrap_or(0);
             let mcp_percentage = tl.percentage;
             let mcp_reset_time = tl.next_reset_time
@@ -334,6 +396,7 @@ fn build_usage_info(
         token_period,
         token_reset_time,
         weekly_token_percentage,
+        weekly_token_period,
         weekly_token_reset_time,
         mcp_total,
         mcp_used,
