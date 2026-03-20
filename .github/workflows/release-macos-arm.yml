@@ -54,3 +54,48 @@ jobs:
           files: |
             src-tauri/target/release/bundle/dmg/*.dmg
             src-tauri/target/release/bundle/macos/*.app.tar.gz
+
+  update-version:
+    needs: build-and-release
+    runs-on: ubuntu-latest
+    if: success()
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Extract version number
+        id: version
+        run: |
+          VERSION="${{ github.event.inputs.tag }}"
+          VERSION="${VERSION#v}"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Update package.json
+        run: |
+          jq --arg v "${{ steps.version.outputs.version }}" '.version = $v' package.json > package.json.tmp
+          mv package.json.tmp package.json
+
+      - name: Update Cargo.toml
+        run: |
+          sed -i 's/^version = ".*"/version = "${{ steps.version.outputs.version }}"/' src-tauri/Cargo.toml
+
+      - name: Update tauri.conf.json
+        run: |
+          jq --arg v "${{ steps.version.outputs.version }}" '.version = $v' src-tauri/tauri.conf.json > src-tauri/tauri.conf.json.tmp
+          mv src-tauri/tauri.conf.json.tmp src-tauri/tauri.conf.json
+
+      - name: Commit and push changes
+        run: |
+          git add package.json src-tauri/Cargo.toml src-tauri/tauri.conf.json
+          git commit -m "chore: bump version to ${{ steps.version.outputs.version }}"
+          git push origin main
