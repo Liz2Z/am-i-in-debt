@@ -169,6 +169,7 @@ impl UsageInfo for ZhipuUsageInfo {
         &self,
         app: &AppHandle,
         is_selected: bool,
+        handles: &mut crate::state::MenuHandles,
     ) -> Vec<Box<dyn IsMenuItem<Wry>>> {
         let mut items: Vec<Box<dyn IsMenuItem<Wry>>> = Vec::new();
 
@@ -182,98 +183,70 @@ impl UsageInfo for ZhipuUsageInfo {
         ).unwrap()));
 
         // 小时额度显示
-        items.push(Box::new(MenuItem::with_id(
-            app,
-            format!("{}-token-title", ZHIPU_ID),
-            format!("Token 额度（{}）", self.token_period),
-            false,
-            None::<&str>,
-        ).unwrap()));
-        items.push(Box::new(MenuItem::with_id(
-            app,
-            format!("{}-token-bar", ZHIPU_ID),
-            format_progress_bar(self.token_percentage),
-            false,
-            None::<&str>,
-        ).unwrap()));
-        items.push(Box::new(MenuItem::with_id(
-            app,
-            format!("{}-token-reset", ZHIPU_ID),
-            format!("重置: {}", self.token_reset_time),
-            false,
-            None::<&str>,
-        ).unwrap()));
+        let token_title = MenuItem::with_id(app, format!("{}-token-title", ZHIPU_ID), format!("Token 额度（{}）", self.token_period), false, None::<&str>).unwrap();
+        handles.items.insert(format!("{}-token-title", ZHIPU_ID), token_title.clone());
+        items.push(Box::new(token_title));
 
-        items.push(Box::new(MenuItem::with_id(
-            app,
-            format!("{}-sep1", ZHIPU_ID),
-            "-".repeat(SEPARATOR_LENGTH),
-            false,
-            None::<&str>,
-        ).unwrap()));
+        let token_bar = MenuItem::with_id(app, format!("{}-token-bar", ZHIPU_ID), format_progress_bar(self.token_percentage), false, None::<&str>).unwrap();
+        handles.items.insert(format!("{}-token-bar", ZHIPU_ID), token_bar.clone());
+        items.push(Box::new(token_bar));
+
+        let token_reset = MenuItem::with_id(app, format!("{}-token-reset", ZHIPU_ID), format!("重置: {}", self.token_reset_time), false, None::<&str>).unwrap();
+        handles.items.insert(format!("{}-token-reset", ZHIPU_ID), token_reset.clone());
+        items.push(Box::new(token_reset));
+
+        items.push(Box::new(MenuItem::with_id(app, format!("{}-sep1", ZHIPU_ID), "-".repeat(SEPARATOR_LENGTH), false, None::<&str>).unwrap()));
 
         // 周额度显示
-        items.push(Box::new(MenuItem::with_id(
-            app,
-            format!("{}-weekly-token-title", ZHIPU_ID),
-            format!("Token 额度（{}）", self.weekly_token_period),
-            false,
-            None::<&str>,
-        ).unwrap()));
-        items.push(Box::new(MenuItem::with_id(
-            app,
-            format!("{}-weekly-token-bar", ZHIPU_ID),
-            format_progress_bar(self.weekly_token_percentage),
-            false,
-            None::<&str>,
-        ).unwrap()));
-        items.push(Box::new(MenuItem::with_id(
-            app,
-            format!("{}-weekly-token-reset", ZHIPU_ID),
-            format!("重置: {}", self.weekly_token_reset_time),
-            false,
-            None::<&str>,
-        ).unwrap()));
+        let weekly_title = MenuItem::with_id(app, format!("{}-weekly-token-title", ZHIPU_ID), format!("Token 额度（{}）", self.weekly_token_period), false, None::<&str>).unwrap();
+        handles.items.insert(format!("{}-weekly-token-title", ZHIPU_ID), weekly_title.clone());
+        items.push(Box::new(weekly_title));
 
-        items.push(Box::new(MenuItem::with_id(
-            app,
-            format!("{}-sep2", ZHIPU_ID),
-            "-".repeat(SEPARATOR_LENGTH),
-            false,
-            None::<&str>,
-        ).unwrap()));
+        let weekly_bar = MenuItem::with_id(app, format!("{}-weekly-token-bar", ZHIPU_ID), format_progress_bar(self.weekly_token_percentage), false, None::<&str>).unwrap();
+        handles.items.insert(format!("{}-weekly-token-bar", ZHIPU_ID), weekly_bar.clone());
+        items.push(Box::new(weekly_bar));
 
-        items.push(Box::new(MenuItem::with_id(
-            app,
-            format!("{}-mcp-title", ZHIPU_ID),
-            format!("MCP 额度（每月 {} 次）", self.mcp_total),
-            false,
-            None::<&str>,
-        ).unwrap()));
-        items.push(Box::new(MenuItem::with_id(
-            app,
-            format!("{}-mcp-bar", ZHIPU_ID),
-            format_progress_bar(self.mcp_percentage as f64),
-            false,
-            None::<&str>,
-        ).unwrap()));
-        items.push(Box::new(MenuItem::with_id(
-            app,
-            format!("{}-mcp-detail", ZHIPU_ID),
-            format!("搜索: {} | 网页: {} | 阅读: {}", self.mcp_search, self.mcp_web, self.mcp_zread),
-            false,
-            None::<&str>,
-        ).unwrap()));
-        items.push(Box::new(MenuItem::with_id(
-            app,
-            format!("{}-mcp-reset", ZHIPU_ID),
-            format!("重置: {}", self.mcp_reset_time),
-            false,
-            None::<&str>,
-        ).unwrap()));
+        let weekly_reset = MenuItem::with_id(app, format!("{}-weekly-token-reset", ZHIPU_ID), format!("重置: {}", self.weekly_token_reset_time), false, None::<&str>).unwrap();
+        handles.items.insert(format!("{}-weekly-token-reset", ZHIPU_ID), weekly_reset.clone());
+        items.push(Box::new(weekly_reset));
+
+        items.push(Box::new(MenuItem::with_id(app, format!("{}-sep2", ZHIPU_ID), "-".repeat(SEPARATOR_LENGTH), false, None::<&str>).unwrap()));
+
+        // MCP 额度
+        let mcp_title = MenuItem::with_id(app, format!("{}-mcp-title", ZHIPU_ID), format!("MCP 额度（每月 {} 次）", self.mcp_total), false, None::<&str>).unwrap();
+        handles.items.insert(format!("{}-mcp-title", ZHIPU_ID), mcp_title.clone());
+        items.push(Box::new(mcp_title));
+
+        let mcp_bar = MenuItem::with_id(app, format!("{}-mcp-bar", ZHIPU_ID), format_progress_bar(self.mcp_percentage as f64), false, None::<&str>).unwrap();
+        handles.items.insert(format!("{}-mcp-bar", ZHIPU_ID), mcp_bar.clone());
+        items.push(Box::new(mcp_bar));
+
+        let mcp_detail = MenuItem::with_id(app, format!("{}-mcp-detail", ZHIPU_ID), format!("搜索: {} | 网页: {} | 阅读: {}", self.mcp_search, self.mcp_web, self.mcp_zread), false, None::<&str>).unwrap();
+        handles.items.insert(format!("{}-mcp-detail", ZHIPU_ID), mcp_detail.clone());
+        items.push(Box::new(mcp_detail));
+
+        let mcp_reset = MenuItem::with_id(app, format!("{}-mcp-reset", ZHIPU_ID), format!("重置: {}", self.mcp_reset_time), false, None::<&str>).unwrap();
+        handles.items.insert(format!("{}-mcp-reset", ZHIPU_ID), mcp_reset.clone());
+        items.push(Box::new(mcp_reset));
+
         items.push(Box::new(PredefinedMenuItem::separator(app).unwrap()));
 
         items
+    }
+
+    fn menu_item_updates(&self) -> Vec<(String, String)> {
+        vec![
+            (format!("{}-token-title", ZHIPU_ID), format!("Token 额度（{}）", self.token_period)),
+            (format!("{}-token-bar", ZHIPU_ID), format_progress_bar(self.token_percentage)),
+            (format!("{}-token-reset", ZHIPU_ID), format!("重置: {}", self.token_reset_time)),
+            (format!("{}-weekly-token-title", ZHIPU_ID), format!("Token 额度（{}）", self.weekly_token_period)),
+            (format!("{}-weekly-token-bar", ZHIPU_ID), format_progress_bar(self.weekly_token_percentage)),
+            (format!("{}-weekly-token-reset", ZHIPU_ID), format!("重置: {}", self.weekly_token_reset_time)),
+            (format!("{}-mcp-title", ZHIPU_ID), format!("MCP 额度（每月 {} 次）", self.mcp_total)),
+            (format!("{}-mcp-bar", ZHIPU_ID), format_progress_bar(self.mcp_percentage as f64)),
+            (format!("{}-mcp-detail", ZHIPU_ID), format!("搜索: {} | 网页: {} | 阅读: {}", self.mcp_search, self.mcp_web, self.mcp_zread)),
+            (format!("{}-mcp-reset", ZHIPU_ID), format!("重置: {}", self.mcp_reset_time)),
+        ]
     }
 
     fn clone_boxed(&self) -> Box<dyn UsageInfo> {

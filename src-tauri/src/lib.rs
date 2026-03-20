@@ -14,4 +14,4 @@ pub use provider_switch::{
     get_current_selected_provider, load_selection_state, merge_settings, AppSelectionState,
 };
 pub use providers::{get_provider_by_id, PROVIDERS};
-pub use state::AppState;
+pub use state::{AppState, FetchResult, FetchStatus, MenuHandles};

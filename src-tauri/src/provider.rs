@@ -5,6 +5,7 @@ use std::pin::Pin;
 use tauri::{menu::IsMenuItem, AppHandle, Wry};
 
 use crate::error::Result;
+use crate::state::MenuHandles;
 
 pub fn get_xdg_data_dir() -> PathBuf {
     if let Ok(xdg_data) = std::env::var("XDG_DATA_HOME") {
@@ -25,8 +26,12 @@ pub trait UsageInfo: Send + Sync + 'static {
         &self,
         app: &AppHandle,
         is_selected: bool,
+        handles: &mut MenuHandles,
     ) -> Vec<Box<dyn IsMenuItem<Wry>>>;
-    
+
+    /// 返回 (menu_item_id, 新文本) 列表，用于原地更新菜单项
+    fn menu_item_updates(&self) -> Vec<(String, String)>;
+
     fn clone_boxed(&self) -> Box<dyn UsageInfo>;
 }
 

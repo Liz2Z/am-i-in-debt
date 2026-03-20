@@ -113,6 +113,7 @@ impl UsageInfo for KimiUsageInfo {
         &self,
         app: &AppHandle,
         is_selected: bool,
+        handles: &mut crate::state::MenuHandles,
     ) -> Vec<Box<dyn IsMenuItem<Wry>>> {
         let mut items: Vec<Box<dyn IsMenuItem<Wry>>> = Vec::new();
         
@@ -125,27 +126,35 @@ impl UsageInfo for KimiUsageInfo {
             None::<&str>,
         ).unwrap()));
         
-        items.push(Box::new(MenuItem::with_id(
+        let hourly_title = MenuItem::with_id(
             app,
             format!("{}-hourly-title", KIMI_ID),
             format!("Token 额度（每 {} 小时）", self.hourly_window),
             false,
             None::<&str>,
-        ).unwrap()));
-        items.push(Box::new(MenuItem::with_id(
+        ).unwrap();
+        handles.items.insert(format!("{}-hourly-title", KIMI_ID), hourly_title.clone());
+        items.push(Box::new(hourly_title));
+
+        let hourly_bar = MenuItem::with_id(
             app,
             format!("{}-hourly-bar", KIMI_ID),
             format_progress_bar(self.hourly_percentage),
             false,
             None::<&str>,
-        ).unwrap()));
-        items.push(Box::new(MenuItem::with_id(
+        ).unwrap();
+        handles.items.insert(format!("{}-hourly-bar", KIMI_ID), hourly_bar.clone());
+        items.push(Box::new(hourly_bar));
+
+        let hourly_reset = MenuItem::with_id(
             app,
             format!("{}-hourly-reset", KIMI_ID),
             format!("重置: {}", self.hourly_reset_time),
             false,
             None::<&str>,
-        ).unwrap()));
+        ).unwrap();
+        handles.items.insert(format!("{}-hourly-reset", KIMI_ID), hourly_reset.clone());
+        items.push(Box::new(hourly_reset));
         
         items.push(Box::new(MenuItem::with_id(
             app,
@@ -155,32 +164,52 @@ impl UsageInfo for KimiUsageInfo {
             None::<&str>,
         ).unwrap()));
         
-        items.push(Box::new(MenuItem::with_id(
+        let weekly_title = MenuItem::with_id(
             app,
             format!("{}-weekly-title", KIMI_ID),
             "Token 额度（每周）",
             false,
             None::<&str>,
-        ).unwrap()));
-        items.push(Box::new(MenuItem::with_id(
+        ).unwrap();
+        handles.items.insert(format!("{}-weekly-title", KIMI_ID), weekly_title.clone());
+        items.push(Box::new(weekly_title));
+
+        let weekly_bar = MenuItem::with_id(
             app,
             format!("{}-weekly-bar", KIMI_ID),
             format_progress_bar(self.weekly_percentage),
             false,
             None::<&str>,
-        ).unwrap()));
-        items.push(Box::new(MenuItem::with_id(
+        ).unwrap();
+        handles.items.insert(format!("{}-weekly-bar", KIMI_ID), weekly_bar.clone());
+        items.push(Box::new(weekly_bar));
+
+        let weekly_reset = MenuItem::with_id(
             app,
             format!("{}-weekly-reset", KIMI_ID),
             format!("重置: {}", self.weekly_reset_time),
             false,
             None::<&str>,
-        ).unwrap()));
+        ).unwrap();
+        handles.items.insert(format!("{}-weekly-reset", KIMI_ID), weekly_reset.clone());
+        items.push(Box::new(weekly_reset));
+
         items.push(Box::new(PredefinedMenuItem::separator(app).unwrap()));
         
         items
     }
     
+    fn menu_item_updates(&self) -> Vec<(String, String)> {
+        vec![
+            (format!("{}-hourly-title", KIMI_ID), format!("Token 额度（每 {} 小时）", self.hourly_window)),
+            (format!("{}-hourly-bar", KIMI_ID), format_progress_bar(self.hourly_percentage)),
+            (format!("{}-hourly-reset", KIMI_ID), format!("重置: {}", self.hourly_reset_time)),
+            (format!("{}-weekly-title", KIMI_ID), "Token 额度（每周）".to_string()),
+            (format!("{}-weekly-bar", KIMI_ID), format_progress_bar(self.weekly_percentage)),
+            (format!("{}-weekly-reset", KIMI_ID), format!("重置: {}", self.weekly_reset_time)),
+        ]
+    }
+
     fn clone_boxed(&self) -> Box<dyn UsageInfo> {
         Box::new(self.clone())
     }
@@ -231,14 +260,13 @@ struct KimiUsageLimitDetail {
 }
 
 fn build_usage_info(usage: &KimiUsage) -> Result<KimiUsageInfo> {
-    let limit_detail = usage
+    let first_limit = usage
         .limits
         .first()
-        .ok_or(AppError::Parse("未找到 limits 数据".to_string()))?
-        .detail
-        .clone();
-    let window = &usage.limits.first().unwrap().window;
-    
+        .ok_or(AppError::Parse("未找到 limits 数据".to_string()))?;
+    let limit_detail = first_limit.detail.clone();
+    let window = &first_limit.window;
+
     let hourly_total = limit_detail
         .limit_value
         .parse::<i64>()

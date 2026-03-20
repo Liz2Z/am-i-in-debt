@@ -4,16 +4,17 @@ use am_i_in_debt::{
     get_current_selected_provider,
     logger::init_logging,
     login::run_login_script,
-    merge_settings,
     provider::UsageInfo,
     providers::{get_provider_by_id, PROVIDERS},
     state::AppState,
     update_menu,
+    menu::{rebuild_menu, update_menu_with_results},
+    state::FetchResult,
 };
 use log::info;
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
-    tray::TrayIconBuilder,
+    tray::{TrayIconBuilder, TrayIconEvent},
     Manager,
 };
 
@@ -50,6 +51,17 @@ fn main() {
                 .menu(&menu)
                 .show_menu_on_left_click(true)
                 .on_menu_event(handle_menu_event)
+                .on_tray_icon_event(|tray, event| {
+                    if let TrayIconEvent::Click { .. } = event {
+                        let app = tray.app_handle().clone();
+                        log::info!("检测到托盘点击，触发后台刷新");
+                        tauri::async_runtime::spawn(async move {
+                            let results = fetch_all_usage().await;
+                            update_menu_with_results(&app, results);
+                            check_exhausted_notification(&app);
+                        });
+                    }
+                })
                 .build(app)?;
 
             let state: tauri::State<AppState> = app.state();
@@ -59,18 +71,23 @@ fn main() {
             let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 log::info!("执行首次额度拉取");
-                let usage_list = fetch_all_usage().await;
-                update_menu(&app_handle, usage_list);
+                let results = fetch_all_usage().await;
+                update_menu_with_results(&app_handle, results);
                 check_exhausted_notification(&app_handle);
             });
 
             let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 loop {
+                    let interval = {
+                        let state: tauri::State<AppState> = app_handle.state();
+                        state.get_refresh_interval()
+                    };
+                    log::info!("定时刷新：等待 {} 秒", interval);
+                    tokio::time::sleep(tokio::time::Duration::from_secs(interval)).await;
                     log::info!("执行定时刷新");
-                    tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
-                    let usage_list = fetch_all_usage().await;
-                    update_menu(&app_handle, usage_list);
+                    let results = fetch_all_usage().await;
+                    update_menu_with_results(&app_handle, results);
                     check_exhausted_notification(&app_handle);
                 }
             });
@@ -82,21 +99,24 @@ fn main() {
         .expect("error while running tauri application");
 }
 
-async fn fetch_all_usage() -> Vec<Box<dyn UsageInfo>> {
-    let mut usage_list = Vec::new();
-    for provider in PROVIDERS.iter() {
-        log::info!("开始拉取 {} 额度信息", provider.display_name());
-        match provider.fetch_usage(provider.cookie_path()).await {
-            Ok(info) => {
-                log::info!("{} 额度拉取成功", provider.display_name());
-                usage_list.push(info);
+async fn fetch_all_usage() -> Vec<FetchResult> {
+    let futures: Vec<_> = PROVIDERS
+        .iter()
+        .map(|provider| async move {
+            log::info!("开始拉取 {} 额度信息", provider.display_name());
+            let result = provider.fetch_usage(provider.cookie_path()).await;
+            match &result {
+                Ok(_) => log::info!("{} 额度拉取成功", provider.display_name()),
+                Err(e) => log::warn!("{} 额度拉取失败: {}", provider.display_name(), e),
             }
-            Err(e) => {
-                log::warn!("{} 额度拉取失败: {}", provider.display_name(), e);
+            FetchResult {
+                provider_id: provider.id(),
+                result,
             }
-        }
-    }
-    usage_list
+        })
+        .collect();
+
+    futures::future::join_all(futures).await
 }
 
 fn check_exhausted_notification(app: &tauri::AppHandle) {
@@ -155,6 +175,13 @@ fn handle_menu_event(app: &tauri::AppHandle, event: tauri::menu::MenuEvent) {
         return;
     }
 
+    if let Some(secs_str) = event_id.strip_prefix("interval-") {
+        if let Ok(secs) = secs_str.parse::<u64>() {
+            handle_interval(app, secs);
+        }
+        return;
+    }
+
     match event_id {
         "refresh" => {
             handle_refresh(app);
@@ -169,18 +196,13 @@ fn handle_menu_event(app: &tauri::AppHandle, event: tauri::menu::MenuEvent) {
 fn handle_select_provider(app: &tauri::AppHandle, provider: &dyn am_i_in_debt::provider::Provider) {
     info!("选择 {} Coding Plan", provider.display_name());
 
-    if let Err(e) = merge_settings(provider) {
+    if let Err(e) = am_i_in_debt::merge_settings(provider) {
         log::error!("切换到{}失败: {}", provider.display_name(), e);
         return;
     }
 
     info!("切换成功，重新构建菜单");
-
-    let state: tauri::State<AppState> = app.state();
-    state.with_usage(|usage_list| {
-        let cloned: Vec<Box<dyn UsageInfo>> = usage_list.iter().map(|u| u.clone_boxed()).collect();
-        update_menu(app, cloned);
-    });
+    rebuild_menu(app);
 }
 
 fn handle_login(app: &tauri::AppHandle, provider: &dyn am_i_in_debt::provider::Provider) {
@@ -227,8 +249,18 @@ fn handle_refresh(app: &tauri::AppHandle) {
     log::info!("手动刷新触发");
     let app_handle = app.clone();
     tauri::async_runtime::spawn(async move {
-        let usage_list = fetch_all_usage().await;
-        update_menu(&app_handle, usage_list);
+        let results = fetch_all_usage().await;
+        update_menu_with_results(&app_handle, results);
         check_exhausted_notification(&app_handle);
     });
+}
+
+fn handle_interval(app: &tauri::AppHandle, secs: u64) {
+    log::info!("切换刷新间隔为 {} 秒", secs);
+    let state: tauri::State<AppState> = app.state();
+    state.set_refresh_interval(secs);
+
+    // 更新菜单中间隔选中状态
+    use am_i_in_debt::menu::update_menu_in_place;
+    update_menu_in_place(app);
 }
