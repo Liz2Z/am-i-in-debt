@@ -56,8 +56,30 @@ export async function fetchKimiCookies(): Promise<void> {
     await Network.enable();
     await Page.enable();
 
+    // 等待浏览器完全准备好
+    await new Promise(resolve => setTimeout(resolve, 500));
+
     console.log("📄 打开 Kimi coding console 页面...");
-    await Page.navigate({ url: TARGET_URL });
+
+    // 使用重试机制确保导航成功
+    let navigateSuccess = false;
+    let navigateRetries = 0;
+    const maxNavigateRetries = 3;
+
+    while (!navigateSuccess && navigateRetries < maxNavigateRetries) {
+      try {
+        await Page.navigate({ url: TARGET_URL });
+        navigateSuccess = true;
+      } catch (error) {
+        navigateRetries++;
+        console.warn(`⚠️  导航失败，重试 ${navigateRetries}/${maxNavigateRetries}:`, error);
+        if (navigateRetries < maxNavigateRetries) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+        } else {
+          throw error;
+        }
+      }
+    }
 
     console.log("⏳ 等待页面加载...");
     await Page.loadEventFired();
