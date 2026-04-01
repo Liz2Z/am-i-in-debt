@@ -28,6 +28,10 @@ fn main() {
     tauri::Builder::default()
         .manage(AppState::new())
         .setup(|app| {
+            // 在 macOS 上隐藏 Dock 图标，仅显示状态栏图标
+            #[cfg(target_os = "macos")]
+            app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+
             let tray_icon = include_bytes!("../icons/tray-icon.png");
             let icon = tauri::image::Image::from_bytes(&tray_icon.to_vec())
                 .expect("Failed to load tray icon");
