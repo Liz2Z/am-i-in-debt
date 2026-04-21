@@ -231,7 +231,7 @@ struct KimiUsage {
 struct KimiUsageDetail {
     #[serde(rename = "limit")]
     limit_value: String,
-    used: String,
+    used: Option<String>,
     remaining: String,
     #[serde(rename = "resetTime")]
     reset_time: String,
@@ -289,14 +289,16 @@ fn build_usage_info(usage: &KimiUsage) -> Result<KimiUsageInfo> {
         .limit_value
         .parse::<i64>()
         .map_err(|e| AppError::Parse(format!("解析 weekly limit 失败: {}", e)))?;
-    let weekly_used = weekly_detail
-        .used
-        .parse::<i64>()
-        .map_err(|e| AppError::Parse(format!("解析 weekly used 失败: {}", e)))?;
     let weekly_remaining = weekly_detail
         .remaining
         .parse::<i64>()
         .map_err(|e| AppError::Parse(format!("解析 weekly remaining 失败: {}", e)))?;
+    let weekly_used = match weekly_detail.used.as_deref() {
+        Some(used) => used
+            .parse::<i64>()
+            .map_err(|e| AppError::Parse(format!("解析 weekly used 失败: {}", e)))?,
+        None => 0,
+    };
     let weekly_percentage = if weekly_total > 0 {
         (weekly_used as f64 / weekly_total as f64) * 100.0
     } else {
@@ -333,4 +335,48 @@ fn find_cookie_value<'a>(cookies: &'a [serde_json::Value], name: &str) -> Option
         .iter()
         .find(|c| c["name"] == name)
         .and_then(|c| c["value"].as_str())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_usage_when_top_level_used_is_missing() {
+        let response = r#"{
+            "usages": [
+                {
+                    "scope": "FEATURE_CODING",
+                    "detail": {
+                        "limit": "100",
+                        "remaining": "98",
+                        "resetTime": "2026-04-28T01:46:44.069047Z"
+                    },
+                    "limits": [
+                        {
+                            "window": {
+                                "duration": 300,
+                                "timeUnit": "TIME_UNIT_MINUTE"
+                            },
+                            "detail": {
+                                "limit": "100",
+                                "remaining": "92",
+                                "resetTime": "2026-04-21T06:46:44.069047Z"
+                            }
+                        }
+                    ]
+                }
+            ]
+        }"#;
+
+        let api_response: KimiApiResponse = serde_json::from_str(response).unwrap();
+        let info = build_usage_info(&api_response.usages[0]).unwrap();
+
+        assert_eq!(info.weekly_total, 100);
+        assert_eq!(info.weekly_remaining, 98);
+        assert_eq!(info.weekly_used, 0);
+        assert_eq!(info.hourly_total, 100);
+        assert_eq!(info.hourly_remaining, 92);
+        assert_eq!(info.hourly_used, 8);
+    }
 }
